@@ -1,0 +1,34 @@
+{
+  "name": "mcp-gdocs",
+  "version": "1.0.0",
+  "description": "MCP server for Google Docs editing via Claude Mobile",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "setup": "npx ts-node setup/oauth-setup.ts",
+    "deploy": "npm run build && npx cdk deploy --require-approval never",
+    "synth": "npm run build && npx cdk synth",
+    "destroy": "npx cdk destroy"
+  },
+  "keywords": [
+    "mcp",
+    "google-docs",
+    "claude",
+    "aws-lambda"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.478.0",
+    "googleapis": "^129.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.131",
+    "@types/node": "^20.10.5",
+    "aws-cdk": "^2.118.0",
+    "aws-cdk-lib": "^2.118.0",
+    "constructs": "^10.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

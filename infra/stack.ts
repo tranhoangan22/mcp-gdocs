@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
-import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as iam from "aws-cdk-lib/aws-iam";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 import * as path from "path";
 
@@ -21,11 +22,11 @@ class McpGDocsStack extends cdk.Stack {
       SECRET_NAME
     );
 
-    // Create the Lambda function
-    const mcpLambda = new lambda.Function(this, "McpGDocsFunction", {
-      runtime: lambda.Runtime.NODEJS_18_X,
-      handler: "index.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "../dist/src")),
+    // Create the Lambda function with bundling (includes node_modules)
+    const mcpLambda = new NodejsFunction(this, "McpGDocsFunction", {
+      entry: path.join(__dirname, "../src/index.ts"),
+      handler: "handler",
+      runtime: Runtime.NODEJS_18_X,
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
       environment: {
@@ -34,6 +35,13 @@ class McpGDocsStack extends cdk.Stack {
       },
       logRetention: logs.RetentionDays.ONE_WEEK,
       description: "MCP server for Google Docs editing",
+      bundling: {
+        minify: true,
+        sourceMap: true,
+        target: "node18",
+        // Exclude AWS SDK v3 (already available in Lambda runtime)
+        externalModules: [],
+      },
     });
 
     // Grant Lambda permission to read and write the secret

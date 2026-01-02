@@ -1,10 +1,13 @@
 import {
   appendContent,
+  deleteSection,
+  findAndReplace,
   insertAfterHeading,
   insertBeforeHeading,
   readDocument,
   replaceDocument,
   replaceSection,
+  searchText,
 } from "./google-docs";
 import { listDocuments } from "./google-drive";
 
@@ -196,6 +199,77 @@ const tools: Tool[] = [
       required: ["documentId", "content"],
     },
   },
+  {
+    name: "find_and_replace",
+    description:
+      "Find and replace text throughout the document. Useful for updating specific text like dates, names, locations, or any repeated text. Replaces ALL occurrences.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "The Google Doc ID",
+        },
+        searchText: {
+          type: "string",
+          description: "The text to find (will match all occurrences)",
+        },
+        replaceText: {
+          type: "string",
+          description: "The text to replace it with",
+        },
+        matchCase: {
+          type: "boolean",
+          description:
+            "Whether to match case exactly (default: false, case-insensitive)",
+        },
+      },
+      required: ["documentId", "searchText", "replaceText"],
+    },
+  },
+  {
+    name: "search_text",
+    description:
+      "Search for text in the document and return all matches with their positions. Useful for finding specific content before making changes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "The Google Doc ID",
+        },
+        searchText: {
+          type: "string",
+          description: "The text to search for",
+        },
+        caseSensitive: {
+          type: "boolean",
+          description: "Whether to match case exactly (default: false)",
+        },
+      },
+      required: ["documentId", "searchText"],
+    },
+  },
+  {
+    name: "delete_section",
+    description:
+      "Delete an entire section including its heading and all content underneath it (until the next heading of same or higher level). Use with caution.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "The Google Doc ID",
+        },
+        headingText: {
+          type: "string",
+          description:
+            "The heading text to find (case-insensitive, partial match). The entire section will be deleted.",
+        },
+      },
+      required: ["documentId", "headingText"],
+    },
+  },
 ];
 
 /**
@@ -276,6 +350,36 @@ async function executeTool(
         throw new Error("documentId and content are required");
       }
       return await replaceDocument(documentId, content);
+    }
+
+    case "find_and_replace": {
+      const documentId = args.documentId as string;
+      const search = args.searchText as string;
+      const replace = args.replaceText as string;
+      const matchCase = (args.matchCase as boolean) || false;
+      if (!documentId || !search || replace === undefined) {
+        throw new Error("documentId, searchText, and replaceText are required");
+      }
+      return await findAndReplace(documentId, search, replace, matchCase);
+    }
+
+    case "search_text": {
+      const documentId = args.documentId as string;
+      const search = args.searchText as string;
+      const caseSensitive = (args.caseSensitive as boolean) || false;
+      if (!documentId || !search) {
+        throw new Error("documentId and searchText are required");
+      }
+      return await searchText(documentId, search, caseSensitive);
+    }
+
+    case "delete_section": {
+      const documentId = args.documentId as string;
+      const headingText = args.headingText as string;
+      if (!documentId || !headingText) {
+        throw new Error("documentId and headingText are required");
+      }
+      return await deleteSection(documentId, headingText);
     }
 
     default:

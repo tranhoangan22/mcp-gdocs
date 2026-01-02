@@ -14,7 +14,7 @@ export interface HeadingInfo {
  * Represents a formatting request to apply after text insertion
  */
 export interface FormattingRequest {
-  type: "heading" | "link";
+  type: "heading" | "link" | "bullet";
   startIndex: number;
   endIndex: number;
   level?: number; // For headings
@@ -35,7 +35,7 @@ export interface ParsedContent {
  * Output format:
  * - [H1], [H2], [H3] prefixes for headings
  * - [text](url) for links
- * - • prefix for bullet points
+ * - • prefix for bullet points (use • or * when inserting)
  */
 export function documentToText(document: docs_v1.Schema$Document): string {
   const content = document.body?.content;
@@ -225,11 +225,67 @@ export function getDocumentEndIndex(document: docs_v1.Schema$Document): number {
 }
 
 /**
+ * Represents a text match location in the document
+ */
+export interface TextMatch {
+  text: string;
+  startIndex: number;
+  endIndex: number;
+}
+
+/**
+ * Find all occurrences of a text string in the document
+ */
+export function findTextInDocument(
+  document: docs_v1.Schema$Document,
+  searchText: string,
+  caseSensitive = false,
+): TextMatch[] {
+  const content = document.body?.content;
+  if (!content) {
+    return [];
+  }
+
+  const matches: TextMatch[] = [];
+  const searchLower = caseSensitive ? searchText : searchText.toLowerCase();
+
+  for (const element of content) {
+    if (element.paragraph) {
+      const elements = element.paragraph.elements || [];
+
+      for (const elem of elements) {
+        if (elem.textRun?.content) {
+          const text = elem.textRun.content;
+          const textToSearch = caseSensitive ? text : text.toLowerCase();
+          const elemStartIndex = elem.startIndex || 0;
+
+          let searchStart = 0;
+          let foundIndex = textToSearch.indexOf(searchLower, searchStart);
+
+          while (foundIndex !== -1) {
+            matches.push({
+              text: text.substring(foundIndex, foundIndex + searchText.length),
+              startIndex: elemStartIndex + foundIndex,
+              endIndex: elemStartIndex + foundIndex + searchText.length,
+            });
+            searchStart = foundIndex + 1;
+            foundIndex = textToSearch.indexOf(searchLower, searchStart);
+          }
+        }
+      }
+    }
+  }
+
+  return matches;
+}
+
+/**
  * Parse marked text content into plain text and formatting requests
  *
  * Input format:
  * - [H1], [H2], [H3] at start of line for headings
  * - [text](url) for links
+ * - • or * at start of line for bullet points
  */
 export function parseContentForInsertion(
   content: string,
@@ -247,6 +303,7 @@ export function parseContentForInsertion(
 
     // Check for heading markers at start of line
     let headingLevel = 0;
+    let isBullet = false;
     if (line.startsWith("[H1] ")) {
       headingLevel = 1;
       line = line.substring(5);
@@ -256,6 +313,14 @@ export function parseContentForInsertion(
     } else if (line.startsWith("[H3] ")) {
       headingLevel = 3;
       line = line.substring(5);
+    } else if (line.startsWith("• ")) {
+      // Bullet point marker (used in output from documentToText)
+      isBullet = true;
+      line = line.substring(2);
+    } else if (line.startsWith("* ")) {
+      // Alternative bullet point marker (common markdown style)
+      isBullet = true;
+      line = line.substring(2);
     }
 
     // Parse links in the line: [text](url)
@@ -304,6 +369,15 @@ export function parseContentForInsertion(
       });
     }
 
+    // Add bullet formatting request for the entire line
+    if (isBullet && processedLine.length > 0) {
+      formattingRequests.push({
+        type: "bullet",
+        startIndex: currentIndex,
+        endIndex: currentIndex + lineWithNewline.length,
+      });
+    }
+
     plainText += lineWithNewline;
     currentIndex += lineLength;
   }
@@ -334,8 +408,25 @@ export function generateInsertRequests(
       },
     });
 
+    // Apply NORMAL_TEXT paragraph style to all inserted paragraphs first
+    // This ensures proper font size, color, and line spacing matching the document defaults
+    requests.push({
+      updateParagraphStyle: {
+        range: {
+          startIndex: insertionIndex,
+          endIndex: insertionIndex + plainText.length,
+        },
+        paragraphStyle: {
+          namedStyleType: "NORMAL_TEXT",
+        },
+        fields: "namedStyleType",
+      },
+    });
+
     // Reset text formatting for the inserted text to avoid inheriting styles (like bold)
     // from adjacent text. This ensures clean, normal text by default.
+    // Note: We only reset boolean styles here. foregroundColor and fontSize cannot be
+    // reset with empty objects - they would cause "Unsupported dimension unit:UNIT_UNSPECIFIED" errors.
     requests.push({
       updateTextStyle: {
         range: {
@@ -378,6 +469,16 @@ export function generateInsertRequests(
             namedStyleType,
           },
           fields: "namedStyleType",
+        },
+      });
+    } else if (fmt.type === "bullet") {
+      requests.push({
+        createParagraphBullets: {
+          range: {
+            startIndex: fmt.startIndex,
+            endIndex: fmt.endIndex,
+          },
+          bulletPreset: "BULLET_DISC_CIRCLE_SQUARE",
         },
       });
     } else if (fmt.type === "link" && fmt.url) {

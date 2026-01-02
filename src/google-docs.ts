@@ -4,6 +4,7 @@ import {
   documentToText,
   findHeadingByText,
   findSectionEnd,
+  findTextInDocument,
   generateDeleteRequest,
   generateInsertRequests,
   getDocumentEndIndex,
@@ -333,4 +334,111 @@ export async function replaceDocument(
     `Successfully replaced document content with ${requests.length} requests`,
   );
   return "Successfully replaced document content";
+}
+
+/**
+ * Find and replace text throughout the document
+ */
+export async function findAndReplace(
+  documentId: string,
+  searchText: string,
+  replaceText: string,
+  matchCase = false,
+): Promise<string> {
+  console.log(
+    `Finding and replacing "${searchText}" with "${replaceText}" in document: ${documentId}`,
+  );
+
+  const docs = await getDocsClient();
+
+  // Use Google Docs native replaceAllText for efficiency
+  const requests: docs_v1.Schema$Request[] = [
+    {
+      replaceAllText: {
+        containsText: {
+          text: searchText,
+          matchCase,
+        },
+        replaceText,
+      },
+    },
+  ];
+
+  const response = await docs.documents.batchUpdate({
+    documentId,
+    requestBody: {
+      requests,
+    },
+  });
+
+  // Get the number of replacements from the response
+  const replaceResult = response.data.replies?.[0]?.replaceAllText;
+  const occurrencesChanged = replaceResult?.occurrencesChanged || 0;
+
+  console.log(`Replaced ${occurrencesChanged} occurrence(s)`);
+  return `Replaced ${occurrencesChanged} occurrence(s) of "${searchText}" with "${replaceText}"`;
+}
+
+/**
+ * Search for text in the document and return matches with context
+ */
+export async function searchText(
+  documentId: string,
+  searchText: string,
+  caseSensitive = false,
+): Promise<string> {
+  console.log(`Searching for "${searchText}" in document: ${documentId}`);
+
+  const document = await getDocument(documentId);
+  const matches = findTextInDocument(document, searchText, caseSensitive);
+
+  if (matches.length === 0) {
+    return `No matches found for "${searchText}"`;
+  }
+
+  const results = matches.map((match, index) => {
+    return `${index + 1}. Found at position ${match.startIndex}-${match.endIndex}: "${match.text}"`;
+  });
+
+  return `Found ${matches.length} match(es) for "${searchText}":\n\n${results.join("\n")}`;
+}
+
+/**
+ * Delete a specific section by heading
+ */
+export async function deleteSection(
+  documentId: string,
+  headingText: string,
+): Promise<string> {
+  console.log(`Deleting section "${headingText}" in document: ${documentId}`);
+
+  const docs = await getDocsClient();
+  const document = await getDocument(documentId);
+
+  // Find the heading
+  const heading = findHeadingByText(document, headingText);
+  if (!heading) {
+    throw new Error(`Heading not found: "${headingText}"`);
+  }
+
+  // Find the end of the section
+  const sectionEnd = findSectionEnd(document, heading);
+  console.log(
+    `Section "${heading.text}" spans from ${heading.startIndex} to ${sectionEnd}`,
+  );
+
+  // Delete the entire section (heading + content)
+  const requests: docs_v1.Schema$Request[] = [
+    generateDeleteRequest(heading.startIndex, sectionEnd),
+  ];
+
+  await docs.documents.batchUpdate({
+    documentId,
+    requestBody: {
+      requests,
+    },
+  });
+
+  console.log(`Successfully deleted section "${heading.text}"`);
+  return `Successfully deleted section "${heading.text}"`;
 }

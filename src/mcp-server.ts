@@ -1,6 +1,7 @@
 import {
   appendContent,
   insertAfterHeading,
+  insertBeforeHeading,
   readDocument,
   replaceDocument,
   replaceSection,
@@ -101,9 +102,34 @@ const tools: Tool[] = [
     },
   },
   {
+    name: "insert_before_heading",
+    description:
+      "Insert a new section BEFORE a specific heading. Use this when you want to add a completely new section that should appear above the target heading. The heading is matched by text (case-insensitive, partial match supported).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "The Google Doc ID",
+        },
+        headingText: {
+          type: "string",
+          description:
+            "The heading text to find (case-insensitive, partial match). New content will be inserted BEFORE this heading.",
+        },
+        content: {
+          type: "string",
+          description:
+            "Content to insert before the heading. Use [H1], [H2], [H3] for headings, [text](url) for links",
+        },
+      },
+      required: ["documentId", "headingText", "content"],
+    },
+  },
+  {
     name: "insert_after_heading",
     description:
-      "Insert content after a specific heading in the document. The heading is matched by text (case-insensitive, partial match supported).",
+      "Insert content immediately after a heading line (within the same section). Use this to add content to an existing section. The heading is matched by text (case-insensitive, partial match supported).",
     inputSchema: {
       type: "object",
       properties: {
@@ -211,6 +237,16 @@ async function executeTool(
         throw new Error("documentId and content are required");
       }
       return await appendContent(documentId, content);
+    }
+
+    case "insert_before_heading": {
+      const documentId = args.documentId as string;
+      const headingText = args.headingText as string;
+      const content = args.content as string;
+      if (!documentId || !headingText || !content) {
+        throw new Error("documentId, headingText, and content are required");
+      }
+      return await insertBeforeHeading(documentId, headingText, content);
     }
 
     case "insert_after_heading": {

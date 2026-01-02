@@ -134,7 +134,57 @@ export async function appendContent(
 }
 
 /**
- * Insert content after a specific heading
+ * Insert content before a specific heading (new section appears above the target heading)
+ */
+export async function insertBeforeHeading(
+  documentId: string,
+  headingText: string,
+  content: string,
+): Promise<string> {
+  console.log(
+    `Inserting content before heading "${headingText}" in document: ${documentId}`,
+  );
+
+  const docs = await getDocsClient();
+  const document = await getDocument(documentId);
+
+  // Find the heading
+  const heading = findHeadingByText(document, headingText);
+  if (!heading) {
+    throw new Error(`Heading not found: "${headingText}"`);
+  }
+
+  console.log(
+    `Found heading at index ${heading.startIndex}-${heading.endIndex}`,
+  );
+
+  // Insert BEFORE the heading (at its start index)
+  const insertIndex = heading.startIndex;
+
+  // Add a newline after the content to separate from the heading
+  const contentToInsert = `${content}\n`;
+
+  // Generate insert and formatting requests
+  const requests = generateInsertRequests(contentToInsert, insertIndex);
+
+  if (requests.length === 0) {
+    return "No content to insert";
+  }
+
+  // Execute the batch update
+  await docs.documents.batchUpdate({
+    documentId,
+    requestBody: {
+      requests,
+    },
+  });
+
+  console.log(`Successfully inserted content before "${heading.text}"`);
+  return `Successfully inserted content before heading "${heading.text}"`;
+}
+
+/**
+ * Insert content after a specific heading (within the same section, after the heading text)
  */
 export async function insertAfterHeading(
   documentId: string,

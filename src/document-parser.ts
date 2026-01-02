@@ -292,12 +292,14 @@ export function parseContentForInsertion(
     const lineWithNewline = isLastLine ? processedLine : `${processedLine}\n`;
     const lineLength = lineWithNewline.length;
 
-    // Add heading formatting request for the entire line
+    // Add heading formatting request for the entire line INCLUDING the newline
+    // Google Docs requires the newline to be included in the range for paragraph styling
     if (headingLevel > 0 && processedLine.length > 0) {
       formattingRequests.push({
         type: "heading",
         startIndex: currentIndex,
-        endIndex: currentIndex + processedLine.length,
+        // Include the newline character in the range for proper paragraph styling
+        endIndex: currentIndex + lineWithNewline.length,
         level: headingLevel,
       });
     }
@@ -329,6 +331,25 @@ export function generateInsertRequests(
       insertText: {
         location: { index: insertionIndex },
         text: plainText,
+      },
+    });
+
+    // Reset text formatting for the inserted text to avoid inheriting styles (like bold)
+    // from adjacent text. This ensures clean, normal text by default.
+    requests.push({
+      updateTextStyle: {
+        range: {
+          startIndex: insertionIndex,
+          endIndex: insertionIndex + plainText.length,
+        },
+        textStyle: {
+          bold: false,
+          italic: false,
+          underline: false,
+          strikethrough: false,
+          smallCaps: false,
+        },
+        fields: "bold,italic,underline,strikethrough,smallCaps",
       },
     });
   }

@@ -1,13 +1,13 @@
-import * as fs from "fs";
-import * as http from "http";
-import * as url from "url";
-import { google } from "googleapis";
+import * as fs from "node:fs";
+import * as http from "node:http";
+import * as url from "node:url";
 import {
-  SecretsManagerClient,
   CreateSecretCommand,
-  PutSecretValueCommand,
   GetSecretValueCommand,
+  PutSecretValueCommand,
+  SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
+import { google } from "googleapis";
 
 const CREDENTIALS_PATH = "./credentials.json";
 const SECRET_NAME = "mcp-gdocs-credentials";
@@ -43,7 +43,7 @@ async function main() {
         "1. Go to https://console.cloud.google.com/apis/credentials\n" +
         "2. Create or select an OAuth 2.0 Client ID (Desktop app type recommended)\n" +
         "3. Download the JSON file\n" +
-        "4. Save it as 'credentials.json' in the project root\n"
+        "4. Save it as 'credentials.json' in the project root\n",
     );
     process.exit(1);
   }
@@ -55,7 +55,7 @@ async function main() {
   const clientConfig = credentials.installed || credentials.web;
   if (!clientConfig) {
     console.error(
-      "Error: Invalid credentials.json format. Expected 'installed' or 'web' client configuration."
+      "Error: Invalid credentials.json format. Expected 'installed' or 'web' client configuration.",
     );
     process.exit(1);
   }
@@ -70,7 +70,7 @@ async function main() {
   const oauth2Client = new google.auth.OAuth2(
     clientId,
     clientSecret,
-    REDIRECT_URI
+    REDIRECT_URI,
   );
 
   // 3. Generate authorization URL
@@ -151,10 +151,13 @@ async function main() {
     server.listen(REDIRECT_PORT);
 
     // Timeout after 5 minutes
-    setTimeout(() => {
-      server.close();
-      reject(new Error("OAuth flow timed out after 5 minutes"));
-    }, 5 * 60 * 1000);
+    setTimeout(
+      () => {
+        server.close();
+        reject(new Error("OAuth flow timed out after 5 minutes"));
+      },
+      5 * 60 * 1000,
+    );
   });
 
   console.log("  Authorization code received!\n");
@@ -169,7 +172,7 @@ async function main() {
         "To get a new refresh token:\n" +
         "1. Go to https://myaccount.google.com/permissions\n" +
         "2. Remove access for your app\n" +
-        "3. Run this setup again\n"
+        "3. Run this setup again\n",
     );
     process.exit(1);
   }
@@ -177,7 +180,7 @@ async function main() {
   console.log("  Access token received!");
   console.log("  Refresh token received!");
   console.log(
-    `  Token expires: ${new Date(tokens.expiry_date || 0).toISOString()}\n`
+    `  Token expires: ${new Date(tokens.expiry_date || 0).toISOString()}\n`,
   );
 
   // 6. Store credentials in AWS Secrets Manager
@@ -196,7 +199,7 @@ async function main() {
   try {
     // Try to update existing secret
     await secretsClient.send(
-      new GetSecretValueCommand({ SecretId: SECRET_NAME })
+      new GetSecretValueCommand({ SecretId: SECRET_NAME }),
     );
 
     // Secret exists, update it
@@ -204,22 +207,19 @@ async function main() {
       new PutSecretValueCommand({
         SecretId: SECRET_NAME,
         SecretString: secretValue,
-      })
+      }),
     );
     console.log(`  Updated existing secret: ${SECRET_NAME}`);
   } catch (error: unknown) {
     // Check if error is because secret doesn't exist
-    if (
-      error instanceof Error &&
-      error.name === "ResourceNotFoundException"
-    ) {
+    if (error instanceof Error && error.name === "ResourceNotFoundException") {
       // Create new secret
       await secretsClient.send(
         new CreateSecretCommand({
           Name: SECRET_NAME,
           SecretString: secretValue,
           Description: "Google OAuth credentials for MCP Google Docs server",
-        })
+        }),
       );
       console.log(`  Created new secret: ${SECRET_NAME}`);
     } else {
@@ -230,9 +230,7 @@ async function main() {
   console.log("\n=== Setup Complete! ===\n");
   console.log("Next steps:");
   console.log("1. Deploy the MCP server: npm run deploy");
-  console.log(
-    "2. Get your API key from the deploy output or AWS Console"
-  );
+  console.log("2. Get your API key from the deploy output or AWS Console");
   console.log("3. Configure Claude with the endpoint URL and API key\n");
 }
 

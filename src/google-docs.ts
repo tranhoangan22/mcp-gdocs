@@ -1,14 +1,18 @@
-import { google, docs_v1 } from "googleapis";
-import { OAuth2Client } from "google-auth-library";
-import { getCredentials, updateCredentials, GoogleCredentials } from "./secrets";
+import type { OAuth2Client } from "google-auth-library";
+import { type docs_v1, google } from "googleapis";
 import {
   documentToText,
   findHeadingByText,
   findSectionEnd,
-  getDocumentEndIndex,
-  generateInsertRequests,
   generateDeleteRequest,
+  generateInsertRequests,
+  getDocumentEndIndex,
 } from "./document-parser";
+import {
+  type GoogleCredentials,
+  getCredentials,
+  updateCredentials,
+} from "./secrets";
 
 let oauthClient: OAuth2Client | null = null;
 
@@ -24,7 +28,7 @@ async function getAuthClient(): Promise<OAuth2Client> {
 
   oauthClient = new google.auth.OAuth2(
     credentials.clientId,
-    credentials.clientSecret
+    credentials.clientSecret,
   );
 
   oauthClient.setCredentials({
@@ -84,7 +88,7 @@ export async function readDocument(documentId: string): Promise<string> {
  * Get the raw document object for internal operations
  */
 async function getDocument(
-  documentId: string
+  documentId: string,
 ): Promise<docs_v1.Schema$Document> {
   const docs = await getDocsClient();
   const response = await docs.documents.get({ documentId });
@@ -96,7 +100,7 @@ async function getDocument(
  */
 export async function appendContent(
   documentId: string,
-  content: string
+  content: string,
 ): Promise<string> {
   console.log(`Appending content to document: ${documentId}`);
 
@@ -108,7 +112,7 @@ export async function appendContent(
   console.log(`Document end index: ${endIndex}`);
 
   // Add a newline before the new content if document isn't empty
-  const contentToInsert = endIndex > 1 ? "\n" + content : content;
+  const contentToInsert = endIndex > 1 ? `\n${content}` : content;
 
   // Generate insert and formatting requests
   const requests = generateInsertRequests(contentToInsert, endIndex);
@@ -135,10 +139,10 @@ export async function appendContent(
 export async function insertAfterHeading(
   documentId: string,
   headingText: string,
-  content: string
+  content: string,
 ): Promise<string> {
   console.log(
-    `Inserting content after heading "${headingText}" in document: ${documentId}`
+    `Inserting content after heading "${headingText}" in document: ${documentId}`,
   );
 
   const docs = await getDocsClient();
@@ -151,14 +155,14 @@ export async function insertAfterHeading(
   }
 
   console.log(
-    `Found heading at index ${heading.startIndex}-${heading.endIndex}`
+    `Found heading at index ${heading.startIndex}-${heading.endIndex}`,
   );
 
   // Insert after the heading (at its end index)
   const insertIndex = heading.endIndex;
 
   // Add a newline before the content
-  const contentToInsert = "\n" + content;
+  const contentToInsert = `\n${content}`;
 
   // Generate insert and formatting requests
   const requests = generateInsertRequests(contentToInsert, insertIndex);
@@ -185,11 +189,9 @@ export async function insertAfterHeading(
 export async function replaceSection(
   documentId: string,
   headingText: string,
-  newContent: string
+  newContent: string,
 ): Promise<string> {
-  console.log(
-    `Replacing section "${headingText}" in document: ${documentId}`
-  );
+  console.log(`Replacing section "${headingText}" in document: ${documentId}`);
 
   const docs = await getDocsClient();
   const document = await getDocument(documentId);
@@ -203,7 +205,7 @@ export async function replaceSection(
   // Find the end of the section
   const sectionEnd = findSectionEnd(document, heading);
   console.log(
-    `Section "${heading.text}" spans from ${heading.startIndex} to ${sectionEnd}`
+    `Section "${heading.text}" spans from ${heading.startIndex} to ${sectionEnd}`,
   );
 
   // We need to:
@@ -218,10 +220,10 @@ export async function replaceSection(
   }
 
   // Insert new content after the heading
-  const contentToInsert = "\n" + newContent + "\n";
+  const contentToInsert = `\n${newContent}\n`;
   const insertRequests = generateInsertRequests(
     contentToInsert,
-    heading.endIndex
+    heading.endIndex,
   );
   requests.push(...insertRequests);
 
@@ -246,7 +248,7 @@ export async function replaceSection(
  */
 export async function replaceDocument(
   documentId: string,
-  content: string
+  content: string,
 ): Promise<string> {
   console.log(`Replacing entire document: ${documentId}`);
 
@@ -278,7 +280,7 @@ export async function replaceDocument(
   });
 
   console.log(
-    `Successfully replaced document content with ${requests.length} requests`
+    `Successfully replaced document content with ${requests.length} requests`,
   );
   return "Successfully replaced document content";
 }

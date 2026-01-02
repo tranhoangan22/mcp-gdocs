@@ -1,11 +1,11 @@
-import { listDocuments } from "./google-drive";
 import {
-  readDocument,
   appendContent,
   insertAfterHeading,
-  replaceSection,
+  readDocument,
   replaceDocument,
+  replaceSection,
 } from "./google-docs";
+import { listDocuments } from "./google-drive";
 
 /**
  * MCP Tool Definition
@@ -73,7 +73,8 @@ const tools: Tool[] = [
       properties: {
         documentId: {
           type: "string",
-          description: "The Google Doc ID (from list_documents or the document URL)",
+          description:
+            "The Google Doc ID (from list_documents or the document URL)",
         },
       },
       required: ["documentId"],
@@ -112,7 +113,8 @@ const tools: Tool[] = [
         },
         headingText: {
           type: "string",
-          description: "The heading text to find (case-insensitive, partial match)",
+          description:
+            "The heading text to find (case-insensitive, partial match)",
         },
         content: {
           type: "string",
@@ -175,7 +177,7 @@ const tools: Tool[] = [
  */
 async function executeTool(
   name: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
 ): Promise<string> {
   console.log(`Executing tool: ${name}`, JSON.stringify(args));
 
@@ -248,8 +250,13 @@ async function executeTool(
 /**
  * Handle an MCP JSON-RPC request
  */
-export async function handleMCPRequest(request: MCPRequest): Promise<MCPResponse> {
-  console.log(`MCP Request: ${request.method}`, JSON.stringify(request.params || {}));
+export async function handleMCPRequest(
+  request: MCPRequest,
+): Promise<MCPResponse> {
+  console.log(
+    `MCP Request: ${request.method}`,
+    JSON.stringify(request.params || {}),
+  );
 
   try {
     switch (request.method) {

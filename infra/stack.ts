@@ -1,13 +1,13 @@
 #!/usr/bin/env node
+import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
-import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
-import * as logs from "aws-cdk-lib/aws-logs";
 import * as iam from "aws-cdk-lib/aws-iam";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Runtime } from "aws-cdk-lib/aws-lambda";
-import { Construct } from "constructs";
-import * as path from "path";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import * as logs from "aws-cdk-lib/aws-logs";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
+import type { Construct } from "constructs";
 
 const SECRET_NAME = "mcp-gdocs-credentials";
 
@@ -19,7 +19,7 @@ class McpGDocsStack extends cdk.Stack {
     const secret = secretsmanager.Secret.fromSecretNameV2(
       this,
       "GoogleCredentials",
-      SECRET_NAME
+      SECRET_NAME,
     );
 
     // Create the Lambda function with bundling (includes node_modules)
@@ -54,7 +54,7 @@ class McpGDocsStack extends cdk.Stack {
       new iam.PolicyStatement({
         actions: ["secretsmanager:PutSecretValue"],
         resources: [secret.secretArn],
-      })
+      }),
     );
 
     // Create API Gateway REST API
@@ -111,7 +111,7 @@ class McpGDocsStack extends cdk.Stack {
       }),
       {
         apiKeyRequired: true,
-      }
+      },
     );
 
     // Outputs

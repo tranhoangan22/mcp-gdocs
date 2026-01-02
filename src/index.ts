@@ -1,4 +1,4 @@
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { handleMCPRequest } from "./mcp-server";
 
 /**
@@ -6,7 +6,7 @@ import { handleMCPRequest } from "./mcp-server";
  * Receives JSON-RPC requests via API Gateway POST /mcp
  */
 export async function handler(
-  event: APIGatewayProxyEvent
+  event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> {
   console.log("Received request:", JSON.stringify(event, null, 2));
 
@@ -46,7 +46,7 @@ export async function handler(
   }
 
   // Parse request body
-  let request;
+  let request: unknown;
   try {
     if (!event.body) {
       throw new Error("Request body is empty");

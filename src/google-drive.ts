@@ -1,6 +1,10 @@
-import { google, drive_v3 } from "googleapis";
-import { OAuth2Client } from "google-auth-library";
-import { getCredentials, updateCredentials, GoogleCredentials } from "./secrets";
+import type { OAuth2Client } from "google-auth-library";
+import { type drive_v3, google } from "googleapis";
+import {
+  type GoogleCredentials,
+  getCredentials,
+  updateCredentials,
+} from "./secrets";
 
 let oauthClient: OAuth2Client | null = null;
 
@@ -17,7 +21,7 @@ async function getAuthClient(): Promise<OAuth2Client> {
 
   oauthClient = new google.auth.OAuth2(
     credentials.clientId,
-    credentials.clientSecret
+    credentials.clientSecret,
   );
 
   // Set the credentials
@@ -60,7 +64,7 @@ async function getDriveClient(): Promise<drive_v3.Drive> {
  * @returns Array of document metadata (id, name, modifiedTime)
  */
 export async function listDocuments(
-  query?: string
+  query?: string,
 ): Promise<Array<{ id: string; name: string; modifiedTime: string }>> {
   console.log(`Listing documents${query ? ` with query: ${query}` : ""}`);
 
@@ -96,7 +100,7 @@ export async function listDocuments(
  * Get file metadata by ID
  */
 export async function getFileMetadata(
-  fileId: string
+  fileId: string,
 ): Promise<{ id: string; name: string; mimeType: string } | null> {
   const drive = await getDriveClient();
 

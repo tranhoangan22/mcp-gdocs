@@ -1,7 +1,7 @@
 import {
-  SecretsManagerClient,
   GetSecretValueCommand,
   PutSecretValueCommand,
+  SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
 
 export interface GoogleCredentials {
@@ -59,9 +59,13 @@ export async function getCredentials(): Promise<GoogleCredentials> {
   const credentials = JSON.parse(response.SecretString) as GoogleCredentials;
 
   // Validate required fields
-  if (!credentials.clientId || !credentials.clientSecret || !credentials.refreshToken) {
+  if (
+    !credentials.clientId ||
+    !credentials.clientSecret ||
+    !credentials.refreshToken
+  ) {
     throw new Error(
-      "Invalid credentials: missing clientId, clientSecret, or refreshToken"
+      "Invalid credentials: missing clientId, clientSecret, or refreshToken",
     );
   }
 
@@ -78,7 +82,7 @@ export async function getCredentials(): Promise<GoogleCredentials> {
  * Called when tokens are refreshed
  */
 export async function updateCredentials(
-  credentials: GoogleCredentials
+  credentials: GoogleCredentials,
 ): Promise<void> {
   console.log("Updating credentials in Secrets Manager");
   const secretName = getSecretName();

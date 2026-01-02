@@ -1,4 +1,4 @@
-import { docs_v1 } from "googleapis";
+import type { docs_v1 } from "googleapis";
 
 /**
  * Represents a parsed heading with its location in the document
@@ -161,7 +161,7 @@ export function findHeadings(document: docs_v1.Schema$Document): HeadingInfo[] {
  */
 export function findHeadingByText(
   document: docs_v1.Schema$Document,
-  searchText: string
+  searchText: string,
 ): HeadingInfo | null {
   const headings = findHeadings(document);
   const searchLower = searchText.toLowerCase().trim();
@@ -188,11 +188,11 @@ export function findHeadingByText(
  */
 export function findSectionEnd(
   document: docs_v1.Schema$Document,
-  heading: HeadingInfo
+  heading: HeadingInfo,
 ): number {
   const headings = findHeadings(document);
   const headingIndex = headings.findIndex(
-    (h) => h.startIndex === heading.startIndex
+    (h) => h.startIndex === heading.startIndex,
   );
 
   if (headingIndex === -1) {
@@ -233,7 +233,7 @@ export function getDocumentEndIndex(document: docs_v1.Schema$Document): number {
  */
 export function parseContentForInsertion(
   content: string,
-  insertionIndex: number
+  insertionIndex: number,
 ): ParsedContent {
   const formattingRequests: FormattingRequest[] = [];
   let plainText = "";
@@ -262,9 +262,8 @@ export function parseContentForInsertion(
     const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
     let processedLine = "";
     let lastEnd = 0;
-    let match;
 
-    while ((match = linkRegex.exec(line)) !== null) {
+    for (const match of line.matchAll(linkRegex)) {
       // Add text before the link
       processedLine += line.substring(lastEnd, match.index);
 
@@ -290,7 +289,7 @@ export function parseContentForInsertion(
     processedLine += line.substring(lastEnd);
 
     // Add newline except for last line (caller will add if needed)
-    const lineWithNewline = isLastLine ? processedLine : processedLine + "\n";
+    const lineWithNewline = isLastLine ? processedLine : `${processedLine}\n`;
     const lineLength = lineWithNewline.length;
 
     // Add heading formatting request for the entire line
@@ -315,11 +314,11 @@ export function parseContentForInsertion(
  */
 export function generateInsertRequests(
   content: string,
-  insertionIndex: number
+  insertionIndex: number,
 ): docs_v1.Schema$Request[] {
   const { plainText, formattingRequests } = parseContentForInsertion(
     content,
-    insertionIndex
+    insertionIndex,
   );
 
   const requests: docs_v1.Schema$Request[] = [];
@@ -336,7 +335,7 @@ export function generateInsertRequests(
 
   // Then apply formatting (in reverse order of index to avoid shifting issues)
   const sortedFormatting = [...formattingRequests].sort(
-    (a, b) => b.startIndex - a.startIndex
+    (a, b) => b.startIndex - a.startIndex,
   );
 
   for (const fmt of sortedFormatting) {
@@ -345,8 +344,8 @@ export function generateInsertRequests(
         fmt.level === 1
           ? "HEADING_1"
           : fmt.level === 2
-          ? "HEADING_2"
-          : "HEADING_3";
+            ? "HEADING_2"
+            : "HEADING_3";
 
       requests.push({
         updateParagraphStyle: {
@@ -386,7 +385,7 @@ export function generateInsertRequests(
  */
 export function generateDeleteRequest(
   startIndex: number,
-  endIndex: number
+  endIndex: number,
 ): docs_v1.Schema$Request {
   return {
     deleteContentRange: {

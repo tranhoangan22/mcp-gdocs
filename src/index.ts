@@ -46,12 +46,12 @@ export async function handler(
   }
 
   // Parse request body
-  let request: unknown;
+  let parsedBody: Record<string, unknown>;
   try {
     if (!event.body) {
       throw new Error("Request body is empty");
     }
-    request = JSON.parse(event.body);
+    parsedBody = JSON.parse(event.body);
   } catch (error) {
     console.error("Failed to parse request body:", error);
     return {
@@ -72,7 +72,11 @@ export async function handler(
   }
 
   // Validate JSON-RPC request format
-  if (!request.jsonrpc || request.jsonrpc !== "2.0" || !request.method) {
+  if (
+    !parsedBody.jsonrpc ||
+    parsedBody.jsonrpc !== "2.0" ||
+    !parsedBody.method
+  ) {
     return {
       statusCode: 400,
       headers: {
@@ -81,7 +85,7 @@ export async function handler(
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
-        id: request.id || null,
+        id: parsedBody.id || null,
         error: {
           code: -32600,
           message: "Invalid Request: Must be a valid JSON-RPC 2.0 request",
@@ -89,6 +93,14 @@ export async function handler(
       }),
     };
   }
+
+  // At this point we know the request is valid MCP format
+  const request = {
+    jsonrpc: parsedBody.jsonrpc as "2.0",
+    id: parsedBody.id as number | string,
+    method: parsedBody.method as string,
+    params: parsedBody.params as Record<string, unknown> | undefined,
+  };
 
   // Handle the MCP request
   try {

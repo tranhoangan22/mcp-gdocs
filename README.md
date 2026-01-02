@@ -14,25 +14,26 @@ An MCP (Model Context Protocol) server that enables Claude on iOS to read and ed
 ## Architecture
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Claude Mobile  │────▶│  AWS Lambda +    │────▶│  Google APIs    │
-│      App        │◀────│  API Gateway     │◀────│  - Docs API     │
-└─────────────────┘     └──────────────────┘     │  - Drive API    │
-                               │                 └─────────────────┘
-                               ▼
-                        ┌──────────────────┐
-                        │ Secrets Manager  │
-                        │ (OAuth tokens)   │
-                        └──────────────────┘
+┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Claude Mobile  │────▶│   AWS WAF        │────▶│  AWS Lambda +    │────▶│  Google APIs    │
+│      App        │◀────│ (IP allowlist)   │◀────│  API Gateway     │◀────│  - Docs API     │
+└─────────────────┘     └──────────────────┘     └──────────────────┘     │  - Drive API    │
+                                                        │                 └─────────────────┘
+                                                        ▼
+                                                 ┌──────────────────┐
+                                                 │ Secrets Manager  │
+                                                 │ (OAuth tokens)   │
+                                                 └──────────────────┘
 ```
 
 ### How It Works
 
 1. **Claude Mobile** sends MCP tool requests to your AWS endpoint
-2. **API Gateway** validates the API key and forwards requests to Lambda
-3. **Lambda** retrieves Google OAuth tokens from Secrets Manager
-4. **Lambda** calls Google Docs/Drive APIs to read or edit documents
-5. Results flow back through the chain to Claude
+2. **AWS WAF** validates the request comes from Claude's IP addresses (see [Security](#security-model))
+3. **API Gateway** forwards requests to Lambda
+4. **Lambda** retrieves Google OAuth tokens from Secrets Manager
+5. **Lambda** calls Google Docs/Drive APIs to read or edit documents
+6. Results flow back through the chain to Claude
 
 ## Prerequisites
 
@@ -214,78 +215,48 @@ This command:
 **Resources created:**
 - **Lambda Function** - Your MCP server code running in the cloud
 - **API Gateway** - HTTPS endpoint that routes requests to Lambda
-- **API Key** - Secret key required to call your API
-- **Usage Plan** - Rate limiting (10 requests/sec, 20 burst)
+- **AWS WAF** - IP allowlist that only accepts requests from Claude's IP addresses
 - **IAM Role** - Permissions for Lambda to access Secrets Manager
 
-**Save these outputs** (you'll need them):
+**Save this output** (you'll need it):
 ```
 Outputs:
 McpGDocsStack.ApiEndpoint = https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/v1/mcp
-McpGDocsStack.ApiKeyId = abc123xyz
 McpGDocsStack.LambdaFunctionName = McpGDocsStack-McpGDocsFunction-xxxxx
+McpGDocsStack.SecurityNote = This endpoint uses IP allowlisting (WAF) instead of API keys...
 ```
 
 ---
 
-### Step 7: Get Your API Key
+### Step 7: Configure Claude
 
-The deploy output shows the API Key **ID**, not the actual key value. Retrieve it with:
+Add your MCP server to Claude's configuration:
+- **Endpoint URL**: The `ApiEndpoint` from deploy output
 
-```bash
-aws apigateway get-api-key --api-key YOUR_API_KEY_ID --include-value --query 'value' --output text
-```
+That's it! No API key is needed. The endpoint is protected by IP allowlisting - only Claude's servers can access it.
 
-Replace `YOUR_API_KEY_ID` with the `ApiKeyId` from the deploy output.
-
-**Why?** API keys are stored securely in AWS. The `--include-value` flag is required to retrieve the actual key value, and your IAM user must have permission to do this.
+(Specific configuration steps depend on your Claude client)
 
 ---
 
-### Step 8: Test Your Server
+### Step 8: Test Your Server (Optional)
 
-Set your variables:
+> **Note:** Testing from your local machine will be blocked by the WAF since your IP is not in Claude's IP range. These commands are for reference only.
+
+To test, you would need to temporarily add your IP to the WAF allowlist in `infra/stack.ts`, redeploy, then remove it after testing.
 
 ```bash
 ENDPOINT="https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/v1/mcp"
-KEY="your-actual-api-key-value"
-```
 
-#### Test the connection:
-
-```bash
-curl -X POST "$ENDPOINT" -H "x-api-key: $KEY" -H "Content-Type: application/json" \
+# Test the connection (will fail from non-Claude IPs)
+curl -X POST "$ENDPOINT" -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize"}'
 ```
 
-Expected response:
+Expected response (when called from Claude):
 ```json
 {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"mcp-gdocs","version":"1.0.0"}}}
 ```
-
-#### List your documents:
-
-```bash
-curl -X POST "$ENDPOINT" -H "x-api-key: $KEY" -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_documents","arguments":{}}}'
-```
-
-#### Read a specific document:
-
-```bash
-curl -X POST "$ENDPOINT" -H "x-api-key: $KEY" -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{"documentId":"YOUR_DOC_ID"}}}'
-```
-
----
-
-### Step 9: Configure Claude
-
-Add your MCP server to Claude's configuration with:
-- **Endpoint URL**: The `ApiEndpoint` from deploy output
-- **API Key**: The key value from Step 7
-
-(Specific configuration steps depend on your Claude client)
 
 ---
 
@@ -442,13 +413,39 @@ Optionally, revoke Google access:
 
 ---
 
-## Security Notes
+## Security Model
+
+This server uses **IP allowlisting** instead of API key authentication.
+
+### Why No API Key?
+
+Claude's connector system doesn't support custom `x-api-key` headers for remote MCP servers. Instead, we use AWS WAF to restrict access to only Claude's IP addresses.
+
+### How It Works
+
+1. **AWS WAF** is attached to the API Gateway
+2. The WAF has an IP allowlist containing [Claude's published IP ranges](https://docs.anthropic.com/en/api/ip-addresses):
+   - `160.79.104.0/21` (primary range)
+   - Legacy IPs (phasing out after Jan 15, 2026)
+3. All requests from non-Claude IPs are blocked with a 403 Forbidden response
+4. Requests from Claude's IPs pass through to the Lambda function
+
+### Security Considerations
 
 - **credentials.json** is git-ignored and should never be committed
 - **OAuth tokens** are stored in AWS Secrets Manager, not in code
-- **API key** is required for all requests to your endpoint
+- **IP allowlisting** ensures only Claude can access your endpoint
 - **HTTPS** is enforced by API Gateway
+- **Rate limiting** is configured (10 req/sec, 20 burst) to prevent abuse
 - Consider restricting your IAM user permissions after initial deployment
+
+### Updating Claude's IPs
+
+If Anthropic updates their IP ranges, update `CLAUDE_IP_RANGES` in `infra/stack.ts` and redeploy:
+
+```bash
+npm run deploy
+```
 
 ---
 

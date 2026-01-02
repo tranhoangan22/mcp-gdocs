@@ -7,9 +7,28 @@ import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
+import * as wafv2 from "aws-cdk-lib/aws-wafv2";
 import type { Construct } from "constructs";
 
 const SECRET_NAME = "mcp-gdocs-credentials";
+
+/**
+ * Claude's IP addresses for MCP server connections (outbound from Claude).
+ * Source: https://docs.anthropic.com/en/api/ip-addresses
+ *
+ * SECURITY NOTE: This stack uses IP allowlisting instead of API key authentication
+ * because Claude's connector system doesn't support custom x-api-key headers.
+ * Only requests from Claude's IP ranges will be accepted.
+ */
+const CLAUDE_IP_RANGES = [
+  "160.79.104.0/21", // Primary outbound range
+  // Legacy IPs (phasing out after Jan 15, 2026)
+  "34.162.46.92/32",
+  "34.162.102.82/32",
+  "34.162.136.91/32",
+  "34.162.142.92/32",
+  "34.162.183.95/32",
+];
 
 class McpGDocsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -57,10 +76,50 @@ class McpGDocsStack extends cdk.Stack {
       }),
     );
 
-    // Create API Gateway REST API
+    // Create WAF IP Set for Claude's IP addresses
+    const claudeIpSet = new wafv2.CfnIPSet(this, "ClaudeIpSet", {
+      name: "claude-mcp-ip-allowlist",
+      scope: "REGIONAL",
+      ipAddressVersion: "IPV4",
+      addresses: CLAUDE_IP_RANGES,
+      description: "Claude IP addresses for MCP server connections",
+    });
+
+    // Create WAF Web ACL that only allows Claude's IPs
+    const webAcl = new wafv2.CfnWebACL(this, "McpWafAcl", {
+      name: "mcp-gdocs-waf",
+      scope: "REGIONAL",
+      defaultAction: { block: {} }, // Block all by default
+      description: "WAF for MCP Google Docs API - allows only Claude IP addresses",
+      visibilityConfig: {
+        cloudWatchMetricsEnabled: true,
+        metricName: "mcp-gdocs-waf",
+        sampledRequestsEnabled: true,
+      },
+      rules: [
+        {
+          name: "AllowClaudeIPs",
+          priority: 1,
+          action: { allow: {} },
+          visibilityConfig: {
+            cloudWatchMetricsEnabled: true,
+            metricName: "AllowClaudeIPs",
+            sampledRequestsEnabled: true,
+          },
+          statement: {
+            ipSetReferenceStatement: {
+              arn: claudeIpSet.attrArn,
+            },
+          },
+        },
+      ],
+    });
+
+    // Create API Gateway REST API (authless - protected by WAF IP allowlist)
     const api = new apigateway.RestApi(this, "McpGDocsApi", {
       restApiName: "MCP Google Docs API",
-      description: "API Gateway for MCP Google Docs server",
+      description:
+        "API Gateway for MCP Google Docs server (authless, protected by WAF IP allowlist)",
       deployOptions: {
         stageName: "v1",
         throttlingRateLimit: 10,
@@ -70,65 +129,46 @@ class McpGDocsStack extends cdk.Stack {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: ["POST", "OPTIONS"],
-        allowHeaders: ["Content-Type", "x-api-key"],
+        allowHeaders: ["Content-Type"],
       },
     });
 
-    // Create API key for authentication
-    const apiKey = new apigateway.ApiKey(this, "McpGDocsApiKey", {
-      apiKeyName: "mcp-gdocs-api-key",
-      description: "API key for MCP Google Docs server",
-      enabled: true,
+    // Associate WAF Web ACL with API Gateway
+    new wafv2.CfnWebACLAssociation(this, "WafAssociation", {
+      resourceArn: api.deploymentStage.stageArn,
+      webAclArn: webAcl.attrArn,
     });
-
-    // Create usage plan with throttling
-    const usagePlan = new apigateway.UsagePlan(this, "McpGDocsUsagePlan", {
-      name: "MCP Google Docs Usage Plan",
-      description: "Usage plan for MCP Google Docs API",
-      throttle: {
-        rateLimit: 10,
-        burstLimit: 20,
-      },
-      apiStages: [
-        {
-          api: api,
-          stage: api.deploymentStage,
-        },
-      ],
-    });
-
-    // Associate API key with usage plan
-    usagePlan.addApiKey(apiKey);
 
     // Create /mcp endpoint
     const mcpResource = api.root.addResource("mcp");
 
-    // Add POST method with Lambda integration and API key requirement
+    // Add POST method with Lambda integration (no API key required - protected by WAF)
     mcpResource.addMethod(
       "POST",
       new apigateway.LambdaIntegration(mcpLambda, {
         proxy: true,
       }),
       {
-        apiKeyRequired: true,
+        apiKeyRequired: false, // Authless - Claude's connector doesn't support x-api-key headers
       },
     );
 
     // Outputs
     new cdk.CfnOutput(this, "ApiEndpoint", {
       value: `${api.url}mcp`,
-      description: "MCP API endpoint URL",
-    });
-
-    new cdk.CfnOutput(this, "ApiKeyId", {
-      value: apiKey.keyId,
       description:
-        "API Key ID (use 'aws apigateway get-api-key --api-key <id> --include-value' to get the value)",
+        "MCP API endpoint URL (authless - protected by WAF IP allowlist)",
     });
 
     new cdk.CfnOutput(this, "LambdaFunctionName", {
       value: mcpLambda.functionName,
       description: "Lambda function name",
+    });
+
+    new cdk.CfnOutput(this, "SecurityNote", {
+      value:
+        "This endpoint uses IP allowlisting (WAF) instead of API keys. Only Claude's IP addresses can access it.",
+      description: "Security configuration note",
     });
   }
 }

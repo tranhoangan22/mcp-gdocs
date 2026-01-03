@@ -90,7 +90,8 @@ class McpGDocsStack extends cdk.Stack {
       name: "mcp-gdocs-waf",
       scope: "REGIONAL",
       defaultAction: { block: {} }, // Block all by default
-      description: "WAF for MCP Google Docs API - allows only Claude IP addresses",
+      description:
+        "WAF for MCP Google Docs API - allows only Claude IP addresses",
       visibilityConfig: {
         cloudWatchMetricsEnabled: true,
         metricName: "mcp-gdocs-waf",

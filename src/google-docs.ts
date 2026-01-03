@@ -1,7 +1,10 @@
 import type { OAuth2Client } from "google-auth-library";
 import { type docs_v1, google } from "googleapis";
 import {
+  calculateDocumentStats,
   documentToText,
+  extractHeadingsOnly,
+  extractSectionContent,
   findHeadingByText,
   findSectionEnd,
   findTextInDocument,
@@ -65,10 +68,34 @@ async function getDocsClient(): Promise<docs_v1.Docs> {
 }
 
 /**
- * Read a document and return its content as marked text
+ * Get just the document title (for validation/identification)
  */
-export async function readDocument(documentId: string): Promise<string> {
-  console.log(`Reading document: ${documentId}`);
+export async function getDocumentTitle(documentId: string): Promise<string> {
+  console.log(`Getting title for document: ${documentId}`);
+  const docs = await getDocsClient();
+  const response = await docs.documents.get({ documentId });
+  return response.data.title || "Untitled";
+}
+
+/**
+ * Options for reading a document with content limiting
+ */
+export interface ReadDocumentOptions {
+  maxCharacters?: number;
+  maxTokens?: number;
+  headingsOnly?: boolean;
+  includeMetadata?: boolean;
+}
+
+/**
+ * Read a document and return its content as marked text
+ * Supports content limiting options to reduce token usage
+ */
+export async function readDocument(
+  documentId: string,
+  options: ReadDocumentOptions = {},
+): Promise<string> {
+  console.log(`Reading document: ${documentId}`, options);
 
   const docs = await getDocsClient();
 
@@ -78,11 +105,119 @@ export async function readDocument(documentId: string): Promise<string> {
 
   const document = response.data;
   const title = document.title || "Untitled";
-  const content = documentToText(document);
+
+  // If headingsOnly, return just the heading structure
+  if (options.headingsOnly) {
+    const fullContent = documentToText(document);
+    const headings = extractHeadingsOnly(fullContent);
+    const stats = calculateDocumentStats(document);
+    let result = `# ${title}\n\n${headings}`;
+    if (options.includeMetadata) {
+      result += `\n\n---\nCharacters: ${stats.characterCount} | Words: ${stats.wordCount} | Headings: ${stats.headingCount}`;
+    }
+    console.log(`Document "${title}" read (headings only)`);
+    return result;
+  }
+
+  let content = documentToText(document);
+  const totalCharacters = content.length;
+
+  // Apply maxTokens limit (estimate: 4 chars ≈ 1 token)
+  let maxChars = options.maxCharacters;
+  if (options.maxTokens) {
+    const tokenBasedLimit = options.maxTokens * 4;
+    maxChars = maxChars ? Math.min(maxChars, tokenBasedLimit) : tokenBasedLimit;
+  }
+
+  // Truncate if needed
+  let truncated = false;
+  if (maxChars && content.length > maxChars) {
+    content = content.substring(0, maxChars);
+    truncated = true;
+  }
+
+  let result = `# ${title}\n\n${content}`;
+
+  if (truncated && maxChars) {
+    result += `\n\n[Content truncated. Document contains approximately ${totalCharacters - maxChars} more characters.]`;
+  }
+
+  if (options.includeMetadata) {
+    const stats = calculateDocumentStats(document);
+    result += `\n\n---\nCharacters: ${stats.characterCount} | Words: ${stats.wordCount} | Headings: ${stats.headingCount}`;
+  }
 
   console.log(`Document "${title}" read successfully`);
 
-  return `# ${title}\n\n${content}`;
+  return result;
+}
+
+/**
+ * Get document metadata without fetching full content
+ */
+export async function getDocumentMetadata(documentId: string): Promise<{
+  documentId: string;
+  title: string;
+  characterCount: number;
+  wordCount: number;
+  headingCount: number;
+  headingStructure: string[];
+}> {
+  console.log(`Getting metadata for document: ${documentId}`);
+
+  const docs = await getDocsClient();
+
+  const response = await docs.documents.get({
+    documentId,
+  });
+
+  const document = response.data;
+  const title = document.title || "Untitled";
+  const stats = calculateDocumentStats(document);
+
+  console.log(`Metadata retrieved for "${title}"`);
+
+  return {
+    documentId,
+    title,
+    characterCount: stats.characterCount,
+    wordCount: stats.wordCount,
+    headingCount: stats.headingCount,
+    headingStructure: stats.headingStructure,
+  };
+}
+
+/**
+ * Read a specific section of the document by heading
+ */
+export async function readSection(
+  documentId: string,
+  headingText: string,
+  includeSubsections = true,
+  maxCharacters?: number,
+): Promise<string> {
+  console.log(`Reading section "${headingText}" from document: ${documentId}`);
+
+  const docs = await getDocsClient();
+
+  const response = await docs.documents.get({
+    documentId,
+  });
+
+  const document = response.data;
+  const result = extractSectionContent(
+    document,
+    headingText,
+    includeSubsections,
+    maxCharacters,
+  );
+
+  if (!result.found) {
+    throw new Error(`Section not found: "${headingText}"`);
+  }
+
+  console.log(`Section "${headingText}" read successfully`);
+  return result.content;
 }
 
 /**
@@ -401,6 +536,182 @@ export async function searchText(
   });
 
   return `Found ${matches.length} match(es) for "${searchText}":\n\n${results.join("\n")}`;
+}
+
+/**
+ * Append content at the end of a section (just before the next heading)
+ * This is useful for adding items to an existing list within a section
+ */
+export async function appendToSection(
+  documentId: string,
+  headingText: string,
+  content: string,
+): Promise<string> {
+  console.log(
+    `Appending content to section "${headingText}" in document: ${documentId}`,
+  );
+
+  const docs = await getDocsClient();
+  const document = await getDocument(documentId);
+
+  // Find the heading
+  const heading = findHeadingByText(document, headingText);
+  if (!heading) {
+    throw new Error(`Heading not found: "${headingText}"`);
+  }
+
+  // Find the end of the section (where the next heading starts or document ends)
+  const sectionEnd = findSectionEnd(document, heading);
+  console.log(
+    `Section "${heading.text}" spans from ${heading.startIndex} to ${sectionEnd}`,
+  );
+
+  // Insert at the end of the section (just before the next heading)
+  // We subtract 1 to insert before the newline that precedes the next heading
+  const insertIndex = sectionEnd;
+
+  // Add content with a newline prefix
+  const contentToInsert = `\n${content}`;
+
+  // Generate insert and formatting requests
+  const requests = generateInsertRequests(contentToInsert, insertIndex);
+
+  if (requests.length === 0) {
+    return "No content to append";
+  }
+
+  // Execute the batch update
+  await docs.documents.batchUpdate({
+    documentId,
+    requestBody: {
+      requests,
+    },
+  });
+
+  console.log(`Successfully appended content to section "${heading.text}"`);
+  return `Successfully appended content to section "${heading.text}"`;
+}
+
+/**
+ * Batch operation types
+ */
+export type BatchOperationType =
+  | "append"
+  | "replace_section"
+  | "find_replace"
+  | "delete_section"
+  | "insert_after"
+  | "insert_before";
+
+export interface BatchOperation {
+  operation: BatchOperationType;
+  params: Record<string, unknown>;
+}
+
+export interface BatchResult {
+  success: boolean;
+  completedOperations: number;
+  totalOperations: number;
+  results: Array<{
+    index: number;
+    success: boolean;
+    message?: string;
+  }>;
+}
+
+/**
+ * Execute multiple operations in a single call
+ */
+export async function batchOperations(
+  documentId: string,
+  operations: BatchOperation[],
+  stopOnError = true,
+): Promise<BatchResult> {
+  console.log(
+    `Executing ${operations.length} batch operations on document: ${documentId}`,
+  );
+
+  const results: BatchResult["results"] = [];
+  let completedOperations = 0;
+
+  for (let i = 0; i < operations.length; i++) {
+    const op = operations[i];
+    try {
+      let message: string;
+
+      switch (op.operation) {
+        case "append":
+          message = await appendContent(
+            documentId,
+            op.params.content as string,
+          );
+          break;
+        case "replace_section":
+          message = await replaceSection(
+            documentId,
+            op.params.headingText as string,
+            op.params.newContent as string,
+          );
+          break;
+        case "find_replace":
+          message = await findAndReplace(
+            documentId,
+            op.params.searchText as string,
+            op.params.replaceText as string,
+            (op.params.matchCase as boolean) || false,
+          );
+          break;
+        case "delete_section":
+          message = await deleteSection(
+            documentId,
+            op.params.headingText as string,
+          );
+          break;
+        case "insert_after":
+          message = await insertAfterHeading(
+            documentId,
+            op.params.headingText as string,
+            op.params.content as string,
+          );
+          break;
+        case "insert_before":
+          message = await insertBeforeHeading(
+            documentId,
+            op.params.headingText as string,
+            op.params.content as string,
+          );
+          break;
+        default:
+          throw new Error(`Unknown operation: ${op.operation}`);
+      }
+
+      results.push({ index: i, success: true, message });
+      completedOperations++;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      results.push({ index: i, success: false, message: errorMessage });
+
+      if (stopOnError) {
+        console.log(
+          `Batch stopped at operation ${i} due to error: ${errorMessage}`,
+        );
+        break;
+      }
+    }
+  }
+
+  const success = completedOperations === operations.length;
+  console.log(
+    `Batch completed: ${completedOperations}/${operations.length} operations successful`,
+  );
+
+  return {
+    success,
+    completedOperations,
+    totalOperations: operations.length,
+    results,
+  };
 }
 
 /**

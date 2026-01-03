@@ -61,12 +61,16 @@ async function getDriveClient(): Promise<drive_v3.Drive> {
  * List Google Docs files from Drive
  *
  * @param query - Optional search query to filter by name
+ * @param limit - Max results to return (default: 10, max: 50)
  * @returns Array of document metadata (id, name, modifiedTime)
  */
 export async function listDocuments(
   query?: string,
+  limit = 10,
 ): Promise<Array<{ id: string; name: string; modifiedTime: string }>> {
-  console.log(`Listing documents${query ? ` with query: ${query}` : ""}`);
+  console.log(
+    `Listing documents${query ? ` with query: ${query}` : ""}, limit: ${limit}`,
+  );
 
   const drive = await getDriveClient();
 
@@ -78,11 +82,14 @@ export async function listDocuments(
     q += ` and name contains '${query.replace(/'/g, "\\'")}'`;
   }
 
+  // Clamp limit to valid range
+  const pageSize = Math.min(Math.max(1, limit), 50);
+
   const response = await drive.files.list({
     q,
     fields: "files(id, name, modifiedTime)",
     orderBy: "modifiedTime desc",
-    pageSize: 50,
+    pageSize,
   });
 
   const files = response.data.files || [];

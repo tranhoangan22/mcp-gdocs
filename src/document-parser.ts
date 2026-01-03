@@ -518,3 +518,195 @@ export function generateDeleteRequest(
     },
   };
 }
+
+/**
+ * Extract only heading lines from document text
+ */
+export function extractHeadingsOnly(documentText: string): string {
+  const lines = documentText.split("\n");
+  const headingLines = lines.filter(
+    (line) =>
+      line.startsWith("[H1] ") ||
+      line.startsWith("[H2] ") ||
+      line.startsWith("[H3] "),
+  );
+  return headingLines.join("\n");
+}
+
+/**
+ * Calculate document statistics
+ */
+export interface DocumentStats {
+  characterCount: number;
+  wordCount: number;
+  headingCount: number;
+  headingStructure: string[];
+}
+
+export function calculateDocumentStats(
+  document: docs_v1.Schema$Document,
+): DocumentStats {
+  const content = document.body?.content;
+  if (!content) {
+    return {
+      characterCount: 0,
+      wordCount: 0,
+      headingCount: 0,
+      headingStructure: [],
+    };
+  }
+
+  let characterCount = 0;
+  let wordCount = 0;
+  const headingStructure: string[] = [];
+
+  for (const element of content) {
+    if (element.paragraph) {
+      const paragraph = element.paragraph;
+      const paragraphStyle = paragraph.paragraphStyle?.namedStyleType;
+      const elements = paragraph.elements || [];
+
+      let paragraphText = "";
+      for (const elem of elements) {
+        if (elem.textRun?.content) {
+          paragraphText += elem.textRun.content;
+        }
+      }
+
+      characterCount += paragraphText.length;
+      // Count words (split by whitespace, filter empty)
+      const words = paragraphText.trim().split(/\s+/).filter(Boolean);
+      wordCount += words.length;
+
+      // Track headings
+      if (
+        paragraphStyle === "HEADING_1" ||
+        paragraphStyle === "HEADING_2" ||
+        paragraphStyle === "HEADING_3"
+      ) {
+        const level =
+          paragraphStyle === "HEADING_1"
+            ? 1
+            : paragraphStyle === "HEADING_2"
+              ? 2
+              : 3;
+        const headingText = paragraphText.replace(/\n$/, "").trim();
+        headingStructure.push(`[H${level}] ${headingText}`);
+      }
+    }
+  }
+
+  return {
+    characterCount,
+    wordCount,
+    headingCount: headingStructure.length,
+    headingStructure,
+  };
+}
+
+/**
+ * Extract section content from a heading until the next heading of equal or higher level
+ */
+export function extractSectionContent(
+  document: docs_v1.Schema$Document,
+  headingText: string,
+  includeSubsections = true,
+  maxCharacters?: number,
+): { content: string; found: boolean; totalCharacters: number } {
+  const headings = findHeadings(document);
+  const searchLower = headingText.toLowerCase().trim();
+
+  // Find the target heading
+  let targetHeadingIndex = -1;
+  for (let i = 0; i < headings.length; i++) {
+    if (
+      headings[i].text.toLowerCase() === searchLower ||
+      headings[i].text.toLowerCase().includes(searchLower)
+    ) {
+      targetHeadingIndex = i;
+      break;
+    }
+  }
+
+  if (targetHeadingIndex === -1) {
+    return { content: "", found: false, totalCharacters: 0 };
+  }
+
+  const targetHeading = headings[targetHeadingIndex];
+  const startIndex = targetHeading.startIndex;
+
+  // Find the end of the section
+  let endIndex = getDocumentEndIndex(document);
+  for (let i = targetHeadingIndex + 1; i < headings.length; i++) {
+    const nextHeading = headings[i];
+    if (includeSubsections) {
+      // Stop at equal or higher level
+      if (nextHeading.level <= targetHeading.level) {
+        endIndex = nextHeading.startIndex;
+        break;
+      }
+    } else {
+      // Stop at any heading
+      endIndex = nextHeading.startIndex;
+      break;
+    }
+  }
+
+  // Extract the text from startIndex to endIndex
+  const content = document.body?.content;
+  if (!content) {
+    return { content: "", found: true, totalCharacters: 0 };
+  }
+
+  // Build the section text by iterating through content
+  let sectionText = "";
+  for (const element of content) {
+    const elemStart = element.startIndex || 0;
+    const elemEnd = element.endIndex || 0;
+
+    if (elemEnd <= startIndex) continue;
+    if (elemStart >= endIndex) break;
+
+    if (element.paragraph) {
+      const paragraph = element.paragraph;
+      const paragraphStyle = paragraph.paragraphStyle?.namedStyleType;
+      const elements = paragraph.elements || [];
+
+      let prefix = "";
+      if (paragraphStyle === "HEADING_1") prefix = "[H1] ";
+      else if (paragraphStyle === "HEADING_2") prefix = "[H2] ";
+      else if (paragraphStyle === "HEADING_3") prefix = "[H3] ";
+      else if (paragraph.bullet) prefix = "• ";
+
+      let paragraphText = "";
+      for (const elem of elements) {
+        if (elem.textRun) {
+          const textRun = elem.textRun;
+          let text = textRun.content || "";
+          const link = textRun.textStyle?.link?.url;
+          if (link && text.trim()) {
+            const linkText = text.replace(/\n$/, "");
+            text = `[${linkText}](${link})`;
+            if (textRun.content?.endsWith("\n")) text += "\n";
+          }
+          paragraphText += text;
+        }
+      }
+
+      if (paragraphText.trim()) {
+        sectionText += `${prefix}${paragraphText.replace(/\n$/, "")}\n`;
+      }
+    }
+  }
+
+  const totalCharacters = sectionText.length;
+  let resultContent = sectionText;
+
+  if (maxCharacters && sectionText.length > maxCharacters) {
+    resultContent =
+      sectionText.substring(0, maxCharacters) +
+      `\n\n[Content truncated. Section contains approximately ${totalCharacters - maxCharacters} more characters.]`;
+  }
+
+  return { content: resultContent.trim(), found: true, totalCharacters };
+}

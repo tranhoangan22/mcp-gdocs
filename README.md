@@ -6,10 +6,24 @@ An MCP (Model Context Protocol) server that enables Claude on iOS to read and ed
 
 - **List Documents**: Search and list Google Docs in your Drive
 - **Read Documents**: View document content with preserved structure (headings, links)
-- **Append Content**: Add content to the end of a document
-- **Insert After Heading**: Add content after a specific heading
+- **Content Limiting**: Truncate responses by character/token count or get headings only
+- **Section Reading**: Read specific sections without loading entire documents
+- **Document Metadata**: Get document stats (word count, structure) without full content
+- **Append Content**: Add content to the end of a document or section
+- **Insert Near Headings**: Add content before or after specific headings
 - **Replace Section**: Replace content under a heading while preserving the heading
-- **Replace Document**: Full document replacement (fallback option)
+- **Find & Replace**: Search and replace text throughout the document
+- **Batch Operations**: Execute multiple edits in a single tool call
+- **Delete Section**: Remove sections including heading and content
+
+### Token Optimization
+
+This server is optimized for minimal token consumption:
+- **Content limiting** on reads (60-90% savings per read)
+- **Section-specific reading** (70-95% savings when targeting specific content)
+- **Metadata-only queries** (~100 tokens vs 5,000-15,000 for full documents)
+- **Batch operations** (40-60% savings for multi-edit workflows)
+- **Compressed tool descriptions** (10-20% savings on definitions)
 
 ## Architecture
 
@@ -288,59 +302,194 @@ More content here.
 
 ## MCP Tools Reference
 
-### list_documents
+All tools support an optional `documentId` parameter. If omitted, the current working document (set via `set_document`) is used.
 
-List Google Docs in your Drive.
+### Document Setup & Navigation
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| query | string | No | Filter documents by name |
+#### resolve_url
 
-### read_document
-
-Read the content of a Google Doc.
+Extract document ID from a Google Docs URL and verify access.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| documentId | string | Yes | The Google Doc ID |
+| url | string | Yes | Google Docs URL to resolve |
 
-### append_content
+#### set_document
 
-Add content to the end of a document.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| documentId | string | Yes | The Google Doc ID |
-| content | string | Yes | Content to append |
-
-### insert_after_heading
-
-Insert content after a specific heading.
+Set the working document for subsequent operations.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| documentId | string | Yes | The Google Doc ID |
+| url | string | Yes | Google Docs URL or document ID |
+
+#### get_current_document
+
+Check which document is currently set as the working document. No parameters required.
+
+#### list_documents
+
+Search and list Google Docs in your Drive.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| query | string | No | Filter documents by name (partial match) |
+| limit | number | No | Max results (default: 10, max: 50) |
+
+### Reading Documents
+
+#### read_document
+
+Read document content with optional content limiting for token efficiency.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| documentId | string | No | The Google Doc ID or URL |
+| maxCharacters | number | No | Truncate content after N characters |
+| maxTokens | number | No | Truncate after ~N tokens (4 chars ≈ 1 token) |
+| headingsOnly | boolean | No | Return only heading structure, no body content |
+| includeMetadata | boolean | No | Include word/character/heading counts |
+
+#### get_document_metadata
+
+Get document statistics without loading full content. Ideal for understanding document size before reading.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| documentId | string | No | The Google Doc ID or URL |
+
+**Returns:** Title, character count, word count, heading count, and heading structure.
+
+#### read_section
+
+Read a specific section by heading text. More efficient than reading entire document.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| documentId | string | No | The Google Doc ID or URL |
+| headingText | string | Yes | Heading to find (case-insensitive partial match) |
+| includeSubsections | boolean | No | Include nested headings (default: true) |
+| maxCharacters | number | No | Truncate section content after N characters |
+
+#### search_text
+
+Find all occurrences of text in the document with their positions.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| documentId | string | No | The Google Doc ID or URL |
+| searchText | string | Yes | Text to search for |
+| caseSensitive | boolean | No | Match case exactly (default: false) |
+
+### Adding Content
+
+#### append_content
+
+Add content at the end of the document.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| documentId | string | No | The Google Doc ID or URL |
+| content | string | Yes | Content to append (with formatting markers) |
+
+#### insert_before_heading
+
+Insert content above a specific heading.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| documentId | string | No | The Google Doc ID or URL |
 | headingText | string | Yes | Heading to find (partial match) |
 | content | string | Yes | Content to insert |
 
-### replace_section
+#### insert_after_heading
 
-Replace content under a heading.
+Insert content immediately after a heading line.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| documentId | string | Yes | The Google Doc ID |
+| documentId | string | No | The Google Doc ID or URL |
+| headingText | string | Yes | Heading to find (partial match) |
+| content | string | Yes | Content to insert |
+
+#### append_to_section
+
+Add content at the bottom of a section (before the next heading).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| documentId | string | No | The Google Doc ID or URL |
+| headingText | string | Yes | Section heading to append to |
+| content | string | Yes | Content to append |
+
+### Modifying Content
+
+#### find_and_replace
+
+Replace all occurrences of text throughout the document.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| documentId | string | No | The Google Doc ID or URL |
+| searchText | string | Yes | Text to find |
+| replaceText | string | Yes | Replacement text (empty string = delete) |
+| matchCase | boolean | No | Match case exactly (default: false) |
+
+#### replace_section
+
+Replace all content under a heading (keeps the heading itself).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| documentId | string | No | The Google Doc ID or URL |
 | headingText | string | Yes | Heading to find (partial match) |
 | newContent | string | Yes | New section content |
 
-### replace_document
+#### replace_document
 
-Replace entire document content.
+Replace entire document content. **DESTRUCTIVE** - use targeted tools when possible.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| documentId | string | Yes | The Google Doc ID |
+| documentId | string | No | The Google Doc ID or URL |
 | content | string | Yes | New document content |
+
+### Deleting Content
+
+#### delete_section
+
+Delete a section including its heading and all content. **DESTRUCTIVE**.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| documentId | string | No | The Google Doc ID or URL |
+| headingText | string | Yes | Section heading to delete |
+
+### Batch Operations
+
+#### batch_operations
+
+Execute multiple write operations in a single call. Reduces round-trips and token usage.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| documentId | string | No | The Google Doc ID or URL |
+| operations | array | Yes | Array of operations (see below) |
+| stopOnError | boolean | No | Stop on first error (default: true) |
+
+**Operation format:** Each operation is an object with `operation` and `params`:
+
+```json
+{
+  "operations": [
+    { "operation": "append", "params": { "content": "New text" } },
+    { "operation": "find_replace", "params": { "searchText": "old", "replaceText": "new" } },
+    { "operation": "replace_section", "params": { "headingText": "Section", "newContent": "Updated" } },
+    { "operation": "delete_section", "params": { "headingText": "Old Section" } },
+    { "operation": "insert_after", "params": { "headingText": "Intro", "content": "Added text" } },
+    { "operation": "insert_before", "params": { "headingText": "Conclusion", "content": "Before text" } }
+  ]
+}
+```
 
 ---
 

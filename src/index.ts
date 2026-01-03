@@ -8,7 +8,7 @@ import { handleMCPRequest } from "./mcp-server";
 export async function handler(
   event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> {
-  console.log("Received request:", JSON.stringify(event, null, 2));
+  console.log(`Request: ${event.httpMethod} ${event.path}`);
 
   // CORS headers for preflight requests
   const corsHeaders = {
@@ -105,7 +105,6 @@ export async function handler(
   // Handle the MCP request
   try {
     const response = await handleMCPRequest(request);
-    console.log("MCP Response:", JSON.stringify(response, null, 2));
 
     return {
       statusCode: 200,

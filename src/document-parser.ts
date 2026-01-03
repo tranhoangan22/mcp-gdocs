@@ -408,20 +408,29 @@ export function generateInsertRequests(
       },
     });
 
-    // Apply NORMAL_TEXT paragraph style to all inserted paragraphs first
-    // This ensures proper font size, color, and line spacing matching the document defaults
-    requests.push({
-      updateParagraphStyle: {
-        range: {
-          startIndex: insertionIndex,
-          endIndex: insertionIndex + plainText.length,
+    // Apply NORMAL_TEXT paragraph style to inserted paragraphs.
+    // IMPORTANT: We exclude the final newline from paragraph styling to avoid
+    // affecting the adjacent paragraph's style (e.g., converting a heading to normal text).
+    // Paragraph styles in Google Docs apply to entire paragraphs, and including the
+    // trailing newline can inadvertently restyle the following paragraph.
+    const styleEndIndex = plainText.endsWith("\n")
+      ? insertionIndex + plainText.length - 1
+      : insertionIndex + plainText.length;
+
+    if (styleEndIndex > insertionIndex) {
+      requests.push({
+        updateParagraphStyle: {
+          range: {
+            startIndex: insertionIndex,
+            endIndex: styleEndIndex,
+          },
+          paragraphStyle: {
+            namedStyleType: "NORMAL_TEXT",
+          },
+          fields: "namedStyleType",
         },
-        paragraphStyle: {
-          namedStyleType: "NORMAL_TEXT",
-        },
-        fields: "namedStyleType",
-      },
-    });
+      });
+    }
 
     // Reset text formatting for the inserted text to avoid inheriting styles (like bold)
     // from adjacent text. This ensures clean, normal text by default.

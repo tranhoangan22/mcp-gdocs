@@ -1,5 +1,9 @@
 # MCP Server for Google Docs
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
+[![CI](https://github.com/tranhoangan22/mcp-gdocs/actions/workflows/ci.yml/badge.svg)](https://github.com/tranhoangan22/mcp-gdocs/actions/workflows/ci.yml)
+
 An MCP (Model Context Protocol) server that enables Claude on iOS to read and edit Google Docs stored in your Google Drive. Have conversations with Claude on your phone and let it directly edit your documents without copy-pasting.
 
 ## Features
@@ -19,11 +23,11 @@ An MCP (Model Context Protocol) server that enables Claude on iOS to read and ed
 ### Token Optimization
 
 This server is optimized for minimal token consumption:
-- **Content limiting** on reads (60-90% savings per read)
-- **Section-specific reading** (70-95% savings when targeting specific content)
-- **Metadata-only queries** (~100 tokens vs 5,000-15,000 for full documents)
-- **Batch operations** (40-60% savings for multi-edit workflows)
-- **Compressed tool descriptions** (10-20% savings on definitions)
+- **Content limiting** on reads
+- **Section-specific reading** 
+- **Metadata-only queries** 
+- **Batch operations**
+- **Compressed tool descriptions**
 
 ## Architecture
 

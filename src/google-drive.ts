@@ -1,53 +1,5 @@
-import type { OAuth2Client } from "google-auth-library";
 import { type drive_v3, google } from "googleapis";
-import {
-  type GoogleCredentials,
-  getCredentials,
-  updateCredentials,
-} from "./secrets";
-
-let oauthClient: OAuth2Client | null = null;
-
-/**
- * Initialize and return an authenticated OAuth2 client
- * Sets up token refresh handler to persist new tokens
- */
-async function getAuthClient(): Promise<OAuth2Client> {
-  if (oauthClient) {
-    return oauthClient;
-  }
-
-  const credentials = await getCredentials();
-
-  oauthClient = new google.auth.OAuth2(
-    credentials.clientId,
-    credentials.clientSecret,
-  );
-
-  // Set the credentials
-  oauthClient.setCredentials({
-    refresh_token: credentials.refreshToken,
-    access_token: credentials.accessToken,
-    expiry_date: credentials.expiryDate,
-  });
-
-  // Handle token refresh events - persist new tokens to Secrets Manager
-  oauthClient.on("tokens", async (tokens) => {
-    console.log("Token refreshed, updating Secrets Manager");
-    const currentCreds = await getCredentials();
-    const updatedCreds: GoogleCredentials = {
-      ...currentCreds,
-      accessToken: tokens.access_token || currentCreds.accessToken,
-      expiryDate: tokens.expiry_date || currentCreds.expiryDate,
-    };
-    if (tokens.refresh_token) {
-      updatedCreds.refreshToken = tokens.refresh_token;
-    }
-    await updateCredentials(updatedCreds);
-  });
-
-  return oauthClient;
-}
+import { getAuthClient } from "./auth";
 
 /**
  * Get an authenticated Google Drive API client

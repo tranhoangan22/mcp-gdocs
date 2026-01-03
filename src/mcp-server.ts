@@ -57,6 +57,30 @@ function getEffectiveDocumentId(args: Record<string, unknown>): string | null {
 }
 
 /**
+ * Get document ID or throw if not available
+ */
+function requireDocumentId(args: Record<string, unknown>): string {
+  const documentId = getEffectiveDocumentId(args);
+  if (!documentId) {
+    throw new Error(
+      "documentId is required (provide it or use set_document first)",
+    );
+  }
+  return documentId;
+}
+
+/**
+ * Require a string argument or throw
+ */
+function requireString(args: Record<string, unknown>, key: string): string {
+  const value = args[key];
+  if (!value || typeof value !== "string") {
+    throw new Error(`${key} is required`);
+  }
+  return value;
+}
+
+/**
  * MCP Tool Definition
  */
 interface Tool {
@@ -473,7 +497,7 @@ async function executeTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<string> {
-  console.log(`Executing tool: ${name}`, JSON.stringify(args));
+  console.log(`Executing tool: ${name}`);
 
   switch (name) {
     case "set_document": {
@@ -510,28 +534,17 @@ async function executeTool(
     }
 
     case "read_document": {
-      const documentId = getEffectiveDocumentId(args);
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
-      const options = {
+      const documentId = requireDocumentId(args);
+      return await readDocument(documentId, {
         maxCharacters: args.maxCharacters as number | undefined,
         maxTokens: args.maxTokens as number | undefined,
         headingsOnly: args.headingsOnly as boolean | undefined,
         includeMetadata: args.includeMetadata as boolean | undefined,
-      };
-      return await readDocument(documentId, options);
+      });
     }
 
     case "get_document_metadata": {
-      const documentId = getEffectiveDocumentId(args);
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
+      const documentId = requireDocumentId(args);
       const metadata = await getDocumentMetadata(documentId);
       return `Document: "${metadata.title}"
 ID: ${metadata.documentId}
@@ -544,168 +557,90 @@ ${metadata.headingStructure.join("\n")}`;
     }
 
     case "read_section": {
-      const documentId = getEffectiveDocumentId(args);
-      const headingText = args.headingText as string;
-      const includeSubsections = (args.includeSubsections as boolean) ?? true;
-      const maxCharacters = args.maxCharacters as number | undefined;
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
-      if (!headingText) {
-        throw new Error("headingText is required");
-      }
+      const documentId = requireDocumentId(args);
+      const headingText = requireString(args, "headingText");
       return await readSection(
         documentId,
         headingText,
-        includeSubsections,
-        maxCharacters,
+        (args.includeSubsections as boolean) ?? true,
+        args.maxCharacters as number | undefined,
       );
     }
 
     case "append_content": {
-      const documentId = getEffectiveDocumentId(args);
-      const content = args.content as string;
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
-      if (!content) {
-        throw new Error("content is required");
-      }
+      const documentId = requireDocumentId(args);
+      const content = requireString(args, "content");
       return await appendContent(documentId, content);
     }
 
     case "insert_before_heading": {
-      const documentId = getEffectiveDocumentId(args);
-      const headingText = args.headingText as string;
-      const content = args.content as string;
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
-      if (!headingText || !content) {
-        throw new Error("headingText and content are required");
-      }
+      const documentId = requireDocumentId(args);
+      const headingText = requireString(args, "headingText");
+      const content = requireString(args, "content");
       return await insertBeforeHeading(documentId, headingText, content);
     }
 
     case "insert_after_heading": {
-      const documentId = getEffectiveDocumentId(args);
-      const headingText = args.headingText as string;
-      const content = args.content as string;
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
-      if (!headingText || !content) {
-        throw new Error("headingText and content are required");
-      }
+      const documentId = requireDocumentId(args);
+      const headingText = requireString(args, "headingText");
+      const content = requireString(args, "content");
       return await insertAfterHeading(documentId, headingText, content);
     }
 
     case "append_to_section": {
-      const documentId = getEffectiveDocumentId(args);
-      const headingText = args.headingText as string;
-      const content = args.content as string;
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
-      if (!headingText || !content) {
-        throw new Error("headingText and content are required");
-      }
+      const documentId = requireDocumentId(args);
+      const headingText = requireString(args, "headingText");
+      const content = requireString(args, "content");
       return await appendToSection(documentId, headingText, content);
     }
 
     case "replace_section": {
-      const documentId = getEffectiveDocumentId(args);
-      const headingText = args.headingText as string;
-      const newContent = args.newContent as string;
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
-      if (!headingText || !newContent) {
-        throw new Error("headingText and newContent are required");
-      }
+      const documentId = requireDocumentId(args);
+      const headingText = requireString(args, "headingText");
+      const newContent = requireString(args, "newContent");
       return await replaceSection(documentId, headingText, newContent);
     }
 
     case "replace_document": {
-      const documentId = getEffectiveDocumentId(args);
-      const content = args.content as string;
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
-      if (!content) {
-        throw new Error("content is required");
-      }
+      const documentId = requireDocumentId(args);
+      const content = requireString(args, "content");
       return await replaceDocument(documentId, content);
     }
 
     case "find_and_replace": {
-      const documentId = getEffectiveDocumentId(args);
-      const search = args.searchText as string;
+      const documentId = requireDocumentId(args);
+      const search = requireString(args, "searchText");
       const replace = args.replaceText as string;
-      const matchCase = (args.matchCase as boolean) || false;
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
+      if (replace === undefined) {
+        throw new Error("replaceText is required");
       }
-      if (!search || replace === undefined) {
-        throw new Error("searchText and replaceText are required");
-      }
-      return await findAndReplace(documentId, search, replace, matchCase);
+      return await findAndReplace(
+        documentId,
+        search,
+        replace,
+        (args.matchCase as boolean) || false,
+      );
     }
 
     case "search_text": {
-      const documentId = getEffectiveDocumentId(args);
-      const search = args.searchText as string;
-      const caseSensitive = (args.caseSensitive as boolean) || false;
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
-      if (!search) {
-        throw new Error("searchText is required");
-      }
-      return await searchText(documentId, search, caseSensitive);
+      const documentId = requireDocumentId(args);
+      const search = requireString(args, "searchText");
+      return await searchText(
+        documentId,
+        search,
+        (args.caseSensitive as boolean) || false,
+      );
     }
 
     case "delete_section": {
-      const documentId = getEffectiveDocumentId(args);
-      const headingText = args.headingText as string;
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
-      if (!headingText) {
-        throw new Error("headingText is required");
-      }
+      const documentId = requireDocumentId(args);
+      const headingText = requireString(args, "headingText");
       return await deleteSection(documentId, headingText);
     }
 
     case "batch_operations": {
-      const documentId = getEffectiveDocumentId(args);
+      const documentId = requireDocumentId(args);
       const operations = args.operations as BatchOperation[];
-      const stopOnError = (args.stopOnError as boolean) ?? true;
-      if (!documentId) {
-        throw new Error(
-          "documentId is required (provide it or use set_document first)",
-        );
-      }
       if (
         !operations ||
         !Array.isArray(operations) ||
@@ -713,7 +648,11 @@ ${metadata.headingStructure.join("\n")}`;
       ) {
         throw new Error("operations array is required and must not be empty");
       }
-      const result = await batchOperations(documentId, operations, stopOnError);
+      const result = await batchOperations(
+        documentId,
+        operations,
+        (args.stopOnError as boolean) ?? true,
+      );
       const summary = result.results
         .map(
           (r) => `${r.index + 1}. ${r.success ? "✓" : "✗"} ${r.message || ""}`,
@@ -748,10 +687,7 @@ ${metadata.headingStructure.join("\n")}`;
 export async function handleMCPRequest(
   request: MCPRequest,
 ): Promise<MCPResponse> {
-  console.log(
-    `MCP Request: ${request.method}`,
-    JSON.stringify(request.params || {}),
-  );
+  console.log(`MCP Request: ${request.method}`);
 
   try {
     switch (request.method) {

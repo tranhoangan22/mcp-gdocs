@@ -8,16 +8,32 @@
     "setup": "npx ts-node setup/oauth-setup.ts",
     "deploy": "npm run build && npx cdk deploy --require-approval never",
     "synth": "npm run build && npx cdk synth",
-    "destroy": "npx cdk destroy"
+    "destroy": "npx cdk destroy",
+    "lint": "npx biome check src/ infra/",
+    "lint:fix": "npx biome check --write src/ infra/",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "google-docs",
     "claude",
-    "aws-lambda"
+    "aws-lambda",
+    "anthropic"
   ],
-  "author": "",
+  "author": "tranhoangan22",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tranhoangan22/mcp-gdocs.git"
+  },
+  "homepage": "https://github.com/tranhoangan22/mcp-gdocs#readme",
+  "bugs": {
+    "url": "https://github.com/tranhoangan22/mcp-gdocs/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.478.0",
     "googleapis": "^129.0.0"

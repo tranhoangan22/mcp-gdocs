@@ -1,6 +1,32 @@
 import { type drive_v3, google } from "googleapis";
 import { getAuthClient } from "./auth";
 
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Document metadata returned from list operations
+ */
+export interface DocumentListItem {
+  id: string;
+  name: string;
+  modifiedTime: string;
+}
+
+/**
+ * File metadata for a single file
+ */
+export interface FileMetadata {
+  id: string;
+  name: string;
+  mimeType: string;
+}
+
+// ============================================================================
+// Internal Helpers
+// ============================================================================
+
 /**
  * Get an authenticated Google Drive API client
  */
@@ -8,6 +34,10 @@ async function getDriveClient(): Promise<drive_v3.Drive> {
   const auth = await getAuthClient();
   return google.drive({ version: "v3", auth });
 }
+
+// ============================================================================
+// Drive Operations
+// ============================================================================
 
 /**
  * List Google Docs files from Drive
@@ -19,7 +49,7 @@ async function getDriveClient(): Promise<drive_v3.Drive> {
 export async function listDocuments(
   query?: string,
   limit = 10,
-): Promise<Array<{ id: string; name: string; modifiedTime: string }>> {
+): Promise<DocumentListItem[]> {
   console.log(
     `Listing documents${query ? ` with query: ${query}` : ""}, limit: ${limit}`,
   );
@@ -60,7 +90,7 @@ export async function listDocuments(
  */
 export async function getFileMetadata(
   fileId: string,
-): Promise<{ id: string; name: string; mimeType: string } | null> {
+): Promise<FileMetadata | null> {
   const drive = await getDriveClient();
 
   try {

@@ -31,7 +31,8 @@ export async function getAuthClient(): Promise<OAuth2Client> {
     expiry_date: credentials.expiryDate,
   });
 
-  // Handle token refresh events - persist new tokens to Secrets Manager
+  // Handle token refresh events.
+  // Persist new tokens to Secrets Manager for future lambda invocations
   oauthClient.on("tokens", async (tokens) => {
     console.log("Token refreshed, updating Secrets Manager");
     const currentCreds = await getCredentials();

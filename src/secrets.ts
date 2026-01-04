@@ -4,6 +4,13 @@ import {
   SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
 
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Google OAuth credentials stored in Secrets Manager
+ */
 export interface GoogleCredentials {
   clientId: string;
   clientSecret: string;
@@ -12,12 +19,20 @@ export interface GoogleCredentials {
   expiryDate?: number;
 }
 
-// In-memory cache to avoid repeated Secrets Manager calls
+// ============================================================================
+// Module State
+// ============================================================================
+
+/** In-memory cache to avoid repeated Secrets Manager calls */
 let cachedCredentials: GoogleCredentials | null = null;
 let cacheTimestamp: number = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 const client = new SecretsManagerClient({});
+
+// ============================================================================
+// Internal Helpers
+// ============================================================================
 
 /**
  * Get the secret name from environment variable
@@ -29,6 +44,10 @@ function getSecretName(): string {
   }
   return secretName;
 }
+
+// ============================================================================
+// Credentials Operations
+// ============================================================================
 
 /**
  * Retrieve Google OAuth credentials from AWS Secrets Manager

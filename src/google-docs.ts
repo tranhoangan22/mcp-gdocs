@@ -13,23 +13,9 @@ import {
   getDocumentEndIndex,
 } from "./document-parser";
 
-/**
- * Get an authenticated Google Docs API client
- */
-async function getDocsClient(): Promise<docs_v1.Docs> {
-  const auth = await getAuthClient();
-  return google.docs({ version: "v1", auth });
-}
-
-/**
- * Get just the document title (for validation/identification)
- */
-export async function getDocumentTitle(documentId: string): Promise<string> {
-  console.log(`Getting title for document: ${documentId}`);
-  const docs = await getDocsClient();
-  const response = await docs.documents.get({ documentId });
-  return response.data.title || "Untitled";
-}
+// ============================================================================
+// Types
+// ============================================================================
 
 /**
  * Options for reading a document with content limiting
@@ -39,6 +25,76 @@ export interface ReadDocumentOptions {
   maxTokens?: number;
   headingsOnly?: boolean;
   includeMetadata?: boolean;
+}
+
+/**
+ * Batch operation types
+ */
+export type BatchOperationType =
+  | "append"
+  | "replace_section"
+  | "find_replace"
+  | "delete_section"
+  | "insert_after"
+  | "insert_before";
+
+/**
+ * A single batch operation with its type and parameters
+ */
+export interface BatchOperation {
+  operation: BatchOperationType;
+  params: Record<string, unknown>;
+}
+
+/**
+ * Result of a batch operation execution
+ */
+export interface BatchResult {
+  success: boolean;
+  completedOperations: number;
+  totalOperations: number;
+  results: Array<{
+    index: number;
+    success: boolean;
+    message?: string;
+  }>;
+}
+
+// ============================================================================
+// Internal Helpers
+// ============================================================================
+
+/**
+ * Get an authenticated Google Docs API client
+ */
+async function getDocsClient(): Promise<docs_v1.Docs> {
+  const auth = await getAuthClient();
+  return google.docs({ version: "v1", auth });
+}
+
+/**
+ * Get the raw document object for internal operations
+ */
+async function getDocument(
+  documentId: string,
+): Promise<docs_v1.Schema$Document> {
+  const docs = await getDocsClient();
+  const response = await docs.documents.get({ documentId });
+  return response.data;
+}
+
+// ============================================================================
+// Document Operations
+// ============================================================================
+
+/**
+ * Get just the document title (for validation/identification)
+ */
+export async function getDocumentTitle(documentId: string): Promise<string> {
+  console.log(`Getting title for document: ${documentId}`);
+  const docs = await getDocsClient();
+  const response = await docs.documents.get({ documentId });
+  return response.data.title || "Untitled";
 }
 
 /**
@@ -172,17 +228,6 @@ export async function readSection(
 
   console.log(`Section "${headingText}" read successfully`);
   return result.content;
-}
-
-/**
- * Get the raw document object for internal operations
- */
-async function getDocument(
-  documentId: string,
-): Promise<docs_v1.Schema$Document> {
-  const docs = await getDocsClient();
-  const response = await docs.documents.get({ documentId });
-  return response.data;
 }
 
 /**
@@ -544,33 +589,6 @@ export async function appendToSection(
 
   console.log(`Successfully appended content to section "${heading.text}"`);
   return `Successfully appended content to section "${heading.text}"`;
-}
-
-/**
- * Batch operation types
- */
-export type BatchOperationType =
-  | "append"
-  | "replace_section"
-  | "find_replace"
-  | "delete_section"
-  | "insert_after"
-  | "insert_before";
-
-export interface BatchOperation {
-  operation: BatchOperationType;
-  params: Record<string, unknown>;
-}
-
-export interface BatchResult {
-  success: boolean;
-  completedOperations: number;
-  totalOperations: number;
-  results: Array<{
-    index: number;
-    success: boolean;
-    message?: string;
-  }>;
 }
 
 /**

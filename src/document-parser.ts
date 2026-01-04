@@ -1,5 +1,9 @@
 import type { docs_v1 } from "googleapis";
 
+// ============================================================================
+// Types
+// ============================================================================
+
 /**
  * Represents a parsed heading with its location in the document
  */
@@ -28,6 +32,29 @@ export interface ParsedContent {
   plainText: string;
   formattingRequests: FormattingRequest[];
 }
+
+/**
+ * Represents a text match location in the document
+ */
+export interface TextMatch {
+  text: string;
+  startIndex: number;
+  endIndex: number;
+}
+
+/**
+ * Document statistics
+ */
+export interface DocumentStats {
+  characterCount: number;
+  wordCount: number;
+  headingCount: number;
+  headingStructure: string[];
+}
+
+// ============================================================================
+// Document Conversion
+// ============================================================================
 
 /**
  * Convert Google Docs API document structure to marked text format
@@ -222,15 +249,6 @@ export function getDocumentEndIndex(document: docs_v1.Schema$Document): number {
   const lastElement = content[content.length - 1];
   // Subtract 1 because endIndex is exclusive and we want to insert before the final newline
   return (lastElement.endIndex || 1) - 1;
-}
-
-/**
- * Represents a text match location in the document
- */
-export interface TextMatch {
-  text: string;
-  startIndex: number;
-  endIndex: number;
 }
 
 /**
@@ -545,13 +563,6 @@ export function extractHeadingsOnly(documentText: string): string {
 /**
  * Calculate document statistics
  */
-export interface DocumentStats {
-  characterCount: number;
-  wordCount: number;
-  headingCount: number;
-  headingStructure: string[];
-}
-
 export function calculateDocumentStats(
   document: docs_v1.Schema$Document,
 ): DocumentStats {

@@ -17,10 +17,108 @@ import {
 } from "./google-docs";
 import { getFileMetadata, listDocuments } from "./google-drive";
 
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * All available tool names
+ */
+const TOOL_NAMES = [
+  // Document setup & navigation
+  "resolve_url",
+  "set_document",
+  "get_current_document",
+  "list_documents",
+  // Reading
+  "read_document",
+  "get_document_metadata",
+  "read_section",
+  "search_text",
+  // Adding content
+  "append_content",
+  "insert_before_heading",
+  "insert_after_heading",
+  "append_to_section",
+  // Modifying content
+  "find_and_replace",
+  "replace_section",
+  "replace_document",
+  // Deleting content
+  "delete_section",
+  // Batch operations
+  "batch_operations",
+] as const;
+
+/**
+ * Union type of all available tool names
+ */
+type ToolName = (typeof TOOL_NAMES)[number];
+
+/**
+ * MCP Tool Definition
+ */
+interface Tool {
+  name: ToolName;
+  description: string;
+  inputSchema: {
+    type: "object";
+    properties: Record<string, { type: string; description: string }>;
+    required: string[];
+  };
+}
+
+/**
+ * MCP JSON-RPC Request
+ */
+interface MCPRequest {
+  jsonrpc: "2.0";
+  id: number | string;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+/**
+ * MCP JSON-RPC Response
+ */
+interface MCPResponse {
+  jsonrpc: "2.0";
+  id: number | string;
+  result?: unknown;
+  error?: {
+    code: number;
+    message: string;
+    data?: unknown;
+  };
+}
+
+/**
+ * Currently selected document reference
+ */
+interface CurrentDocument {
+  id: string;
+  name: string;
+}
+
+// ============================================================================
+// Module State
+// ============================================================================
+
 /**
  * Currently selected document for operations
  */
-let currentDocument: { id: string; name: string } | null = null;
+let currentDocument: CurrentDocument | null = null;
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Type guard to check if a string is a valid ToolName
+ */
+function isToolName(name: string): name is ToolName {
+  return TOOL_NAMES.includes(name as ToolName);
+}
 
 /**
  * Extract document ID from a Google Docs URL or return the ID if already extracted
@@ -78,43 +176,6 @@ function requireString(args: Record<string, unknown>, key: string): string {
     throw new Error(`${key} is required`);
   }
   return value;
-}
-
-/**
- * MCP Tool Definition
- */
-interface Tool {
-  name: string;
-  description: string;
-  inputSchema: {
-    type: "object";
-    properties: Record<string, { type: string; description: string }>;
-    required: string[];
-  };
-}
-
-/**
- * MCP JSON-RPC Request
- */
-interface MCPRequest {
-  jsonrpc: "2.0";
-  id: number | string;
-  method: string;
-  params?: Record<string, unknown>;
-}
-
-/**
- * MCP JSON-RPC Response
- */
-interface MCPResponse {
-  jsonrpc: "2.0";
-  id: number | string;
-  result?: unknown;
-  error?: {
-    code: number;
-    message: string;
-    data?: unknown;
-  };
 }
 
 /**
@@ -494,7 +555,7 @@ const tools: Tool[] = [
  * Execute a tool call
  */
 async function executeTool(
-  name: string,
+  name: ToolName,
   args: Record<string, unknown>,
 ): Promise<string> {
   console.log(`Executing tool: ${name}`);
@@ -676,8 +737,11 @@ ${metadata.headingStructure.join("\n")}`;
       return `Document found:\n  Name: ${metadata.name}\n  ID: ${metadata.id}\n  Type: ${metadata.mimeType}`;
     }
 
-    default:
-      throw new Error(`Unknown tool: ${name}`);
+    default: {
+      // Exhaustiveness check - TypeScript will error if a ToolName case is missing
+      const _exhaustive: never = name;
+      throw new Error(`Unknown tool: ${_exhaustive}`);
+    }
   }
 }
 
@@ -731,6 +795,9 @@ export async function handleMCPRequest(
         };
         if (!params?.name) {
           throw new Error("Tool name is required");
+        }
+        if (!isToolName(params.name)) {
+          throw new Error(`Unknown tool: ${params.name}`);
         }
         const result = await executeTool(params.name, params.arguments || {});
         return {

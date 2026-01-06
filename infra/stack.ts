@@ -140,25 +140,26 @@ class McpGDocsStack extends cdk.Stack {
       webAclArn: webAcl.attrArn,
     });
 
-    // Create /mcp endpoint
+    // Create /mcp/{token} endpoint
     const mcpResource = api.root.addResource("mcp");
+    const tokenResource = mcpResource.addResource("{token}");
 
-    // Add POST method with Lambda integration (no API key required - protected by WAF)
-    mcpResource.addMethod(
+    // Add POST method with Lambda integration (protected by WAF + secret token in path)
+    tokenResource.addMethod(
       "POST",
       new apigateway.LambdaIntegration(mcpLambda, {
         proxy: true,
       }),
       {
-        apiKeyRequired: false, // Authless - Claude's connector doesn't support x-api-key headers
+        apiKeyRequired: false,
       },
     );
 
     // Outputs
     new cdk.CfnOutput(this, "ApiEndpoint", {
-      value: `${api.url}mcp`,
+      value: `${api.url}mcp/<YOUR_SECRET_TOKEN>`,
       description:
-        "MCP API endpoint URL (authless - protected by WAF IP allowlist)",
+        "MCP API endpoint URL (replace <YOUR_SECRET_TOKEN> with token from setup)",
     });
 
     new cdk.CfnOutput(this, "LambdaFunctionName", {

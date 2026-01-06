@@ -1,9 +1,10 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { handleMCPRequest } from "./mcp-server";
+import { validateSecretToken } from "./secrets";
 
 /**
  * Lambda handler for MCP server
- * Receives JSON-RPC requests via API Gateway POST /mcp
+ * Receives JSON-RPC requests via API Gateway POST /mcp/{token}
  */
 export async function handler(
   event: APIGatewayProxyEvent,
@@ -13,7 +14,7 @@ export async function handler(
   // CORS headers for preflight requests
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, x-api-key",
+    "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 
@@ -40,6 +41,28 @@ export async function handler(
         error: {
           code: -32600,
           message: "Method not allowed. Use POST.",
+        },
+      }),
+    };
+  }
+
+  // Validate secret token from URL path
+  const token = event.pathParameters?.token;
+  const isValid = await validateSecretToken(token);
+  if (!isValid) {
+    console.log("Auth failed: invalid or missing token");
+    return {
+      statusCode: 403,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: null,
+        error: {
+          code: -32600,
+          message: "Forbidden: Invalid or missing token",
         },
       }),
     };

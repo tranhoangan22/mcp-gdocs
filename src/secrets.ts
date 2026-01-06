@@ -17,6 +17,8 @@ export interface GoogleCredentials {
   refreshToken: string;
   accessToken?: string;
   expiryDate?: number;
+  // Secret token for authenticating requests (embedded in URL path)
+  mcpSecretToken: string;
 }
 
 // ============================================================================
@@ -88,6 +90,13 @@ export async function getCredentials(): Promise<GoogleCredentials> {
     );
   }
 
+  // Validate MCP secret token
+  if (!credentials.mcpSecretToken) {
+    throw new Error(
+      "Invalid credentials: missing mcpSecretToken. Please re-run setup.",
+    );
+  }
+
   // Update cache
   cachedCredentials = credentials;
   cacheTimestamp = now;
@@ -127,4 +136,29 @@ export async function updateCredentials(
 export function clearCache(): void {
   cachedCredentials = null;
   cacheTimestamp = 0;
+}
+
+/**
+ * Validate the secret token from URL path.
+ * Returns true if token matches, false otherwise.
+ */
+export async function validateSecretToken(
+  token: string | undefined,
+): Promise<boolean> {
+  if (!token) {
+    return false;
+  }
+
+  const credentials = await getCredentials();
+
+  // Constant-time comparison to prevent timing attacks
+  if (token.length !== credentials.mcpSecretToken.length) {
+    return false;
+  }
+
+  let result = 0;
+  for (let i = 0; i < token.length; i++) {
+    result |= token.charCodeAt(i) ^ credentials.mcpSecretToken.charCodeAt(i);
+  }
+  return result === 0;
 }

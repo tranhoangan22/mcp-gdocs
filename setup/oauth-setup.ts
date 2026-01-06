@@ -1,3 +1,4 @@
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as http from "node:http";
 import * as url from "node:url";
@@ -8,15 +9,6 @@ import {
   SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
 import { google } from "googleapis";
-
-const CREDENTIALS_PATH = "./credentials.json";
-const SECRET_NAME = "mcp-gdocs-credentials";
-const SCOPES = [
-  "https://www.googleapis.com/auth/documents",
-  "https://www.googleapis.com/auth/drive.readonly",
-];
-const REDIRECT_PORT = 8085;
-const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}/oauth2callback`;
 
 interface GoogleCredentials {
   installed?: {
@@ -29,6 +21,22 @@ interface GoogleCredentials {
     client_secret: string;
     redirect_uris?: string[];
   };
+}
+
+const CREDENTIALS_PATH = "./credentials.json";
+const SECRET_NAME = "mcp-gdocs-credentials";
+const SCOPES = [
+  "https://www.googleapis.com/auth/documents",
+  "https://www.googleapis.com/auth/drive.readonly",
+];
+const REDIRECT_PORT = 8085;
+const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}/oauth2callback`;
+
+/**
+ * Generate a secure random token for MCP endpoint authentication
+ */
+function generateSecretToken(): string {
+  return crypto.randomBytes(32).toString("hex");
 }
 
 async function main() {
@@ -183,8 +191,13 @@ async function main() {
     `  Token expires: ${new Date(tokens.expiry_date || 0).toISOString()}\n`,
   );
 
-  // 6. Store credentials in AWS Secrets Manager
-  console.log("Step 5: Storing credentials in AWS Secrets Manager...");
+  // 6. Generate MCP secret token for URL-based authentication
+  console.log("Step 5: Generating MCP secret token...");
+  const mcpSecretToken = generateSecretToken();
+  console.log("  Secret token generated!\n");
+
+  // 7. Store credentials in AWS Secrets Manager
+  console.log("Step 6: Storing credentials in AWS Secrets Manager...");
 
   const secretsClient = new SecretsManagerClient({});
 
@@ -194,6 +207,7 @@ async function main() {
     refreshToken: tokens.refresh_token,
     accessToken: tokens.access_token,
     expiryDate: tokens.expiry_date,
+    mcpSecretToken,
   });
 
   try {
@@ -228,10 +242,32 @@ async function main() {
   }
 
   console.log("\n=== Setup Complete! ===\n");
+
+  // Display the secret token prominently
+  console.log(
+    "╔════════════════════════════════════════════════════════════════════════════╗",
+  );
+  console.log(
+    "║  YOUR SECRET TOKEN (save this - you'll need it for Claude!)               ║",
+  );
+  console.log(
+    "╠════════════════════════════════════════════════════════════════════════════╣",
+  );
+  console.log(`║  ${mcpSecretToken}  ║`);
+  console.log(
+    "╚════════════════════════════════════════════════════════════════════════════╝\n",
+  );
+
   console.log("Next steps:");
   console.log("1. Deploy the MCP server: npm run deploy");
-  console.log("2. Get your API key from the deploy output or AWS Console");
-  console.log("3. Configure Claude with the endpoint URL and API key\n");
+  console.log(
+    "2. Your endpoint URL will be: https://<api-id>.execute-api.<region>.amazonaws.com/v1/mcp/<TOKEN>",
+  );
+  console.log("3. Replace <TOKEN> with the secret token above");
+  console.log("4. Add that full URL to Claude's connector settings\n");
+  console.log(
+    "⚠️  Keep this token secret! Anyone with the full URL can access your Google Docs.\n",
+  );
 }
 
 main().catch((error) => {

@@ -1,6 +1,6 @@
 # MCP Server for Google Docs
 
-An MCP server that enables Claude to read and edit Google Docs in your Google Drive.
+An MCP server that enables Claude, on both mobile and desktop, to read and edit Google Docs in your Google Drive.
 
 ## Features
 
@@ -33,7 +33,7 @@ An MCP server that enables Claude to read and edit Google Docs in your Google Dr
                                                 └──────────────────┘
 ```
 
-### Security: Defense in Depth
+### Security:
 
 Two layers protect your Google Docs from unauthorized access:
 

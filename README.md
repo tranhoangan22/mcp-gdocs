@@ -2,7 +2,7 @@
 
 An MCP server that enables Claude, on both mobile and desktop, to read and edit Google Docs in your Google Drive.
 
-# Note on LLM app support
+## Note on LLM app support
 As of the creation of this project, there is no trivial way to connect consumer LLM apps (e.g. ChatGPT or Gemini on iOS) to an arbitrary, user-hosted MCP server over HTTPS. Most LLM clients require registered or first-party integrations, which is why this MCP server is designed to be used with Claude’s custom connector support or via custom applications.
 
 ## Features
